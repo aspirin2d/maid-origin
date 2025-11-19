@@ -4,7 +4,8 @@
   "description": "maid api",
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/index.ts"
+    "dev": "node --watch src/index.ts",
+    "test": "vitest run --clearScreen"
   },
   "author": "aspirin2ds",
   "license": "ISC",
@@ -21,6 +22,7 @@
     "@types/node": "^24.10.1",
     "@types/pg": "^8.15.6",
     "drizzle-kit": "^0.31.7",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.10"
   }
 }
