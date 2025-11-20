@@ -33,7 +33,7 @@ export const story = pgTable(
     id: serial("id").primaryKey(),
     userId: text("user_id").notNull(),
     name: text("name").notNull(),
-    handler: text("handler").notNull().default("simple"),
+    handler: text("handler").notNull(),
     ...Timestamp,
   },
   (table) => [

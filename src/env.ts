@@ -62,6 +62,14 @@ export const env = {
   // CORS
   ALLOWED_ORIGINS: getOptionalEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
 
+  // OPNEAI
+  OPENAI_API_KEY: getRequiredEnv("OPENAI_API_KEY"),
+  OPENAI_RESPONSE_MODEL: getOptionalEnv("OPENAI_RESPONSE_MODEL", "gpt-4.1"),
+  OPENAI_EMBEDDING_MODEL: getOptionalEnv(
+    "OPENAI_EMBEDDING_MODEL",
+    "text-embedding-3-small",
+  ),
+
   // Feature flags
   isProduction: getNodeEnv() === "production",
   isDevelopment: getNodeEnv() === "development",

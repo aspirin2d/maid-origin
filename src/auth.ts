@@ -22,8 +22,9 @@ const sessionResponseSchema = z.object({
 });
 
 export type User = z.infer<typeof userSchema>;
+export type AppEnv = { Variables: { user: User } };
 
-export const authMiddleware: MiddlewareHandler<{ Variables: { user: User } }> =
+export const authMiddleware: MiddlewareHandler<AppEnv> =
   async (c, next) => {
     const authHeader =
       c.req.header("Authorization") || c.req.header("authorization");

@@ -3,10 +3,11 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
-import { authMiddleware, type User } from "./auth.ts";
+import { authMiddleware, type AppEnv } from "./auth.ts";
 import { env } from "./env.ts";
+import { storyRoute } from "./story.ts";
 
-const app = new Hono<{ Variables: { user: User } }>();
+const app = new Hono<AppEnv>();
 
 // Request logging
 app.use("*", logger());
@@ -34,8 +35,11 @@ app.get("/", (c) => {
   return c.text("Hello, World");
 });
 
-// Auth
+// Auth middileware
 app.use("/api/*", authMiddleware);
+
+// Story routes
+app.route("/api", storyRoute);
 
 app.get("/api/user", (c) => {
   const user = c.get("user");
