@@ -36,7 +36,7 @@ const storyIdSchema = z.coerce.number().int().positive({
   message: "Story id must be a positive integer",
 });
 
-const updateStoryRequestSchema = updateStorySchema.extend({
+const updateStoryRequestSchema = updateStorySchema.safeExtend({
   id: storyIdSchema,
 });
 
@@ -222,7 +222,7 @@ storyRoute.post("/update-story", async (c) => {
   return c.json({ story: record });
 });
 
-storyRoute.get("/stories", async (c) => {
+storyRoute.get("/list-stories", async (c) => {
   const user = c.get("user");
   if (!user) {
     return missingUserResponse(c);
