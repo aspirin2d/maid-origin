@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/index.ts",
-    "test": "vitest run --clearScreen"
+    "test:e2e": "pnpm vitest run --project e2e"
   },
   "author": "aspirin2ds",
   "license": "ISC",
