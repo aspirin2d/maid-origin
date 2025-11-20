@@ -11,14 +11,6 @@ import {
   vector,
 } from "drizzle-orm/pg-core";
 
-export type JSONSerializable =
-  | string
-  | number
-  | boolean
-  | null
-  | JSONSerializable[]
-  | { [key: string]: JSONSerializable };
-
 const Timestamp = {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
@@ -50,7 +42,7 @@ export const message = pgTable(
       .notNull()
       .references(() => story.id, { onDelete: "cascade" }),
     contentType: text("content-type").notNull(),
-    content: jsonb("content").$type<JSONSerializable | null>(),
+    content: jsonb("content").notNull(),
     extracted: boolean("extracted").notNull().default(false),
     ...Timestamp,
   },

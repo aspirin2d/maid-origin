@@ -2,7 +2,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "../db/index.ts";
-import { message, type JSONSerializable } from "../db/schema.ts";
+import { message } from "../db/schema.ts";
 import type {
   MessageInsert,
   StoryHandler,
@@ -48,7 +48,12 @@ export const simpleHandler: StoryHandler<typeof outputSchema> = {
     ).reverse();
 
     const parsed = inputSchema.parse(context.input);
-    const formattedHistory = formatConversationHistory(historyMessages);
+    const formattedHistory = historyMessages.map((msg) => {
+      return this.messageToString({
+        contentType: msg.contentType,
+        content: msg.content,
+      });
+    });
     const promptSections = [
       `You are a helpful assistant. Answer the user's question in JSON format that matches the provided schema.`,
       "## Conversation so far:",
@@ -86,66 +91,14 @@ export const simpleHandler: StoryHandler<typeof outputSchema> = {
     };
     return [responseMessage];
   },
+  messageToString(message) {
+    if (message.contentType === "input") {
+      return `User: ${message.content.question}`;
+    }
+    if (message.contentType === "response") {
+      return `User: ${message.content.answer}`;
+    }
+
+    throw new Error("Unsupported content type: " + message.contentType);
+  },
 };
-
-type HistoryMessage = {
-  contentType: string;
-  content: JSONSerializable | null;
-};
-
-function formatConversationHistory(messages: HistoryMessage[]): string[] {
-  return messages.map((msg) => {
-    const prefix = msg.contentType === "input" ? "User" : "Assistant";
-    return `${prefix}: ${extractDisplayText(msg)}`;
-  });
-}
-
-function extractDisplayText(message: HistoryMessage): string {
-  if (message.contentType === "input") {
-    const question = extractStringField(message.content, "question");
-    if (question) {
-      return question;
-    }
-  }
-
-  if (message.contentType === "response") {
-    const answer = extractStringField(message.content, "answer");
-    if (answer) {
-      return answer;
-    }
-  }
-
-  return stringifyContent(message.content);
-}
-
-function extractStringField(
-  content: JSONSerializable | null,
-  field: string,
-): string | null {
-  if (isRecord(content)) {
-    const value = content[field];
-    if (typeof value === "string") {
-      return value;
-    }
-  }
-
-  return null;
-}
-
-function stringifyContent(content: JSONSerializable | null): string {
-  if (content === null || content === undefined) {
-    return "<empty>";
-  }
-
-  if (typeof content === "string") {
-    return content;
-  }
-
-  return JSON.stringify(content);
-}
-
-function isRecord(
-  value: JSONSerializable | null,
-): value is Record<string, JSONSerializable> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}

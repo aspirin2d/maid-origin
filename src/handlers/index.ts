@@ -2,18 +2,17 @@ import z from "zod";
 
 import type { ZodType } from "zod";
 import type { User } from "../auth.ts";
-import type { JSONSerializable } from "../db/schema.ts";
 import { simpleHandler } from "./simple.ts";
 
 export type MessageInsert = {
   contentType: string;
-  content: JSONSerializable | null;
+  content: any;
 };
 
 export interface StoryHandlerContext {
   storyId: string;
   user: User;
-  input: JSONSerializable; // story-response router payload
+  input: any; // story-response router payload
 }
 
 export interface StoryHandler<T extends ZodType> {
@@ -28,6 +27,7 @@ export interface StoryHandler<T extends ZodType> {
     context: StoryHandlerContext,
     response: z.infer<T>,
   ): Promise<MessageInsert[]>;
+  messageToString(message: MessageInsert): string;
 }
 
 const registeredStoryHandlers = [simpleHandler] as const;
