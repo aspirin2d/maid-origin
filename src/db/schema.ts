@@ -49,9 +49,8 @@ export const message = pgTable(
     storyId: integer("story_id")
       .notNull()
       .references(() => story.id, { onDelete: "cascade" }),
-    role: text("role", { enum: ["system", "user", "assistant"] }).notNull(),
-    content: text("content").notNull(),
-    metadata: jsonb().$type<JSONSerializable | null>(),
+    contentType: text("content-type").notNull(),
+    content: jsonb("content").$type<JSONSerializable | null>(),
     extracted: boolean("extracted").notNull().default(false),
     ...Timestamp,
   },
@@ -80,7 +79,6 @@ export const memory = pgTable(
     action: text("action", { enum: ["ADD", "UPDATE", "DELETE"] }),
 
     embedding: vector("embedding", { dimensions: 1536 }),
-
     ...Timestamp,
   },
   (table) => [

@@ -220,3 +220,57 @@ test("stories listing respects limit, offset, and sorting", async () => {
     }
   }
 }, 30_000);
+
+test("authenticated user can generate a story response", async () => {
+  const token = await loginAndGetBearerToken();
+  const baseUrl = getApiBaseUrl();
+  const authHeaders = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/json",
+  } as const;
+  const jsonHeaders = {
+    ...authHeaders,
+    "Content-Type": "application/json",
+  } as const;
+
+  const createResponse = await fetch(`${baseUrl}/api/create-story`, {
+    method: "POST",
+    headers: jsonHeaders,
+    body: JSON.stringify({
+      name: `E2E Generate Story ${Date.now()}`,
+      handler: "simple",
+    }),
+  });
+  const created = await expectJsonResponse<StoryResponse>(createResponse, 201);
+  expect(created.story, "Create response must include a story").toBeTruthy();
+
+  const storyId = created.story!.id;
+  try {
+    const generateResponse = await fetch(`${baseUrl}/api/generate-story`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        storyId,
+        input: { question: "What is result of '1+9' ?" },
+      }),
+    });
+
+    const generated = await expectJsonResponse<{
+      storyId: number;
+      handler: string;
+      response?: { answer: string };
+    }>(generateResponse);
+
+    expect(generated.storyId).toBe(storyId);
+    expect(generated.handler).toBe("simple");
+    expect(generated.response?.answer).toBeTruthy();
+    expect(typeof generated.response?.answer).toBe("string");
+    expect(generated.response?.answer).contains("10");
+  } finally {
+    await fetch(`${baseUrl}/api/delete-story`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ id: storyId }),
+    }).catch(() => undefined);
+  }
+}, 30_000);

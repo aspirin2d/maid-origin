@@ -1,11 +1,16 @@
 import { and, asc, desc, eq } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 
 import type { AppEnv } from "./auth.ts";
 import { db } from "./db/index.ts";
-import { story } from "./db/schema.ts";
-import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import { message, story } from "./db/schema.ts";
+import {
+  getStoryHandlerByName,
+  type StoryHandlerContext,
+} from "./handlers/index.ts";
+import { Response } from "./openai.ts";
 
 type StoryInsert = typeof story.$inferInsert;
 const storyRoute = new Hono<AppEnv>();
@@ -42,6 +47,11 @@ const updateStoryRequestSchema = updateStorySchema.safeExtend({
 
 const deleteStorySchema = z.object({
   id: storyIdSchema,
+});
+
+const generateStorySchema = z.object({
+  storyId: z.coerce.number().int(),
+  input: z.any(),
 });
 
 const sortableStoryFields = [
@@ -264,6 +274,101 @@ storyRoute.get("/list-stories", async (c) => {
 
   const stories = await storiesQuery;
   return c.json({ stories });
+});
+
+storyRoute.post("/generate-story", async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return missingUserResponse(c);
+  }
+
+  let payload: unknown;
+  try {
+    payload = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const parsed = generateStorySchema.safeParse(payload);
+  if (!parsed.success) {
+    return c.json({ error: z.treeifyError(parsed.error) }, 400);
+  }
+
+  const storyId = parsed.data.storyId;
+
+  const existing = await db
+    .select()
+    .from(story)
+    .where(and(eq(story.id, storyId), eq(story.userId, user.id)))
+    .limit(1);
+
+  const record = existing[0];
+  if (!record) {
+    return c.json({ error: "Story not found" }, 404);
+  }
+
+  const handler = getStoryHandlerByName(record.handler);
+  const handlerContext: StoryHandlerContext = {
+    storyId: String(storyId),
+    user,
+    input: parsed.data.input,
+  };
+
+  let beforeGenerateResult;
+  try {
+    beforeGenerateResult = await handler.beforeGenerate(handlerContext);
+  } catch (error) {
+    console.error("Story handler beforeGenerate failed", error);
+    return c.json({ error: "Unable to prepare story generation" }, 500);
+  }
+
+  let modelResponse;
+  try {
+    modelResponse = await Response(
+      beforeGenerateResult.prompt,
+      beforeGenerateResult.responseSchema,
+    );
+  } catch (error) {
+    console.error("OpenAI response generation failed", error);
+    return c.json({ error: "Unable to generate story response" }, 502);
+  }
+
+  let afterGenerateMessages;
+  try {
+    afterGenerateMessages = await handler.afterGenerate(
+      handlerContext,
+      modelResponse,
+    );
+  } catch (error) {
+    console.error("Story handler afterGenerate failed", error);
+    return c.json({ error: "Unable to finalize story generation" }, 500);
+  }
+
+  const messagesToInsert = [
+    ...beforeGenerateResult.insertMessages,
+    ...afterGenerateMessages,
+  ];
+
+  if (messagesToInsert.length > 0) {
+    try {
+      await db.insert(message).values(
+        messagesToInsert.map((msg) => ({
+          storyId,
+          contentType: msg.contentType,
+          content: msg.content,
+        })),
+      );
+    } catch (error) {
+      console.error("Failed to persist generated messages", error);
+      return c.json({ error: "Unable to store generated messages" }, 500);
+    }
+  }
+
+  return c.json({
+    storyId,
+    handler: handler.name,
+    response: modelResponse,
+  });
 });
 
 export { storyRoute };
