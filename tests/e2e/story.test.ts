@@ -1,5 +1,4 @@
 import { expect, test } from "vitest";
-
 import { getApiBaseUrl, loginAndGetBearerToken } from "./helpers.ts";
 
 type StoryRecord = {
