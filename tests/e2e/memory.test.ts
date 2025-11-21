@@ -84,27 +84,30 @@ test("user conversation can be converted into memories", async () => {
   const storyId = created.story!.id;
 
   const conversationPrompts = [
-    `Log this detail : I live in Portland, Oregon and my accountability code is ${uniqueSuffix}. Please confirm you captured it.`,
-    `Also note for that I prefer jasmine tea over coffee and I'm training for a 42-mile ultra marathon this winter.`,
+    `I live in Portland, Oregon and my accountability code is ${uniqueSuffix}. Please confirm you captured it.`,
+    `I prefer jasmine tea over coffee and I'm training for a 42-mile ultra marathon this winter.`,
   ];
 
   try {
-    for (const question of conversationPrompts) {
-      const generateResponse = await fetch(`${baseUrl}/api/generate-story`, {
-        method: "POST",
-        headers: jsonHeaders,
-        body: JSON.stringify({
-          storyId,
-          input: { question },
-        }),
-      });
-      const generated =
-        await expectJsonResponse<GenerateStoryResponse>(generateResponse);
-      expect(generated.storyId).toBe(storyId);
-      expect(generated.handler).toBe("simple");
-      expect(generated.response?.answer).toBeTruthy();
-    }
+    const sendConversationMessages = async (questions: string[]) => {
+      for (const question of questions) {
+        const generateResponse = await fetch(`${baseUrl}/api/generate-story`, {
+          method: "POST",
+          headers: jsonHeaders,
+          body: JSON.stringify({
+            storyId,
+            input: { question },
+          }),
+        });
+        const generated =
+          await expectJsonResponse<GenerateStoryResponse>(generateResponse);
+        expect(generated.storyId).toBe(storyId);
+        expect(generated.handler).toBe("simple");
+        expect(generated.response?.answer).toBeTruthy();
+      }
+    };
 
+    await sendConversationMessages(conversationPrompts);
     const extractionResponse = await fetch(`${baseUrl}/api/memory-extraction`, {
       method: "POST",
       headers: authHeaders,
@@ -123,7 +126,7 @@ test("user conversation can be converted into memories", async () => {
     );
 
     const listParams = new URLSearchParams({
-      limit: "10",
+      limit: "20",
       sortBy: "updatedAt",
       sortDirection: "desc",
     });
@@ -136,11 +139,11 @@ test("user conversation can be converted into memories", async () => {
     );
     const memoryList =
       await expectJsonResponse<MemoryListResponse>(listResponse);
-    const sanitizedMemories = (memoryList.memories ?? []).map(
+    let sanitizedMemories = (memoryList.memories ?? []).map(
       ({ embedding: _embedding, ...rest }) => rest,
     );
     console.log(
-      "Memories after extraction:",
+      "Memories after extraction 1:",
       JSON.stringify(sanitizedMemories, null, 2),
     );
     expect(memoryList.memories?.length ?? 0).toBeGreaterThanOrEqual(1);
@@ -167,6 +170,12 @@ test("user conversation can be converted into memories", async () => {
       }
     }
 
+    const followupPrompts = [
+      `Quick correction: I told you earlier that I live in Portland, but I actually moved to Seattle, Washington last week—please update that memory for me.`,
+      `I'm planning a backpacking trip across Patagonia next May.`,
+    ];
+    await sendConversationMessages(followupPrompts);
+
     const secondExtractionResponse = await fetch(
       `${baseUrl}/api/memory-extraction`,
       {
@@ -178,10 +187,45 @@ test("user conversation can be converted into memories", async () => {
       secondExtractionResponse,
     );
     const secondStats = secondExtraction.stats!;
-    expect(secondStats.messagesExtracted).toBe(0);
-    expect(secondStats.factsExtracted).toBe(0);
-    expect(secondStats.memoriesAdded).toBe(0);
-    expect(secondStats.memoriesUpdated).toBe(0);
+    expect(secondStats.messagesExtracted).toBeGreaterThanOrEqual(
+      followupPrompts.length * 2,
+    );
+    expect(secondStats.factsExtracted).toBeGreaterThanOrEqual(1);
+    expect(secondStats.memoriesUpdated).toBeGreaterThanOrEqual(1); // update the live location
+    expect(secondStats.memoriesAdded).toBeGreaterThanOrEqual(1);
+
+    const secondListResponse = await fetch(
+      `${baseUrl}/api/list-memories?${listParams.toString()}`,
+      {
+        method: "GET",
+        headers: authHeaders,
+      },
+    );
+    const secondMemoryList =
+      await expectJsonResponse<MemoryListResponse>(secondListResponse);
+    sanitizedMemories = (secondMemoryList.memories ?? []).map(
+      ({ embedding: _embedding, ...rest }) => rest,
+    );
+    console.log(
+      "Memories after extraction 2:",
+      JSON.stringify(sanitizedMemories, null, 2),
+    );
+
+    const idleExtractionResponse = await fetch(
+      `${baseUrl}/api/memory-extraction`,
+      {
+        method: "POST",
+        headers: authHeaders,
+      },
+    );
+    const idleExtraction = await expectJsonResponse<MemoryExtractionResponse>(
+      idleExtractionResponse,
+    );
+    const idleStats = idleExtraction.stats!;
+    expect(idleStats.messagesExtracted).toBe(0);
+    expect(idleStats.factsExtracted).toBe(0);
+    expect(idleStats.memoriesAdded).toBe(0);
+    expect(idleStats.memoriesUpdated).toBe(0);
   } finally {
     await fetch(`${baseUrl}/api/delete-story`, {
       method: "POST",
