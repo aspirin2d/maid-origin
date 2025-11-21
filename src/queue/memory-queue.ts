@@ -21,64 +21,90 @@ export const memoryQueueEvents = new QueueEvents(
 );
 
 /**
- * Debounce memory extraction for a user
+ * Debounce memory extraction for a user using BullMQ native deduplication
  *
- * This function queues a memory extraction job that will run after a delay.
- * If called multiple times for the same user, it removes the previous delayed
- * job and schedules a new one, effectively debouncing the extraction.
+ * This function uses BullMQ's native deduplication feature in debounce mode.
+ * When called multiple times for the same user within the debounce delay,
+ * BullMQ automatically extends the TTL and replaces the job data with the latest.
+ *
+ * If messages keep coming and we exceed maxWait, the job is forced to execute
+ * immediately to prevent infinite debouncing.
  *
  * @param userId - The user ID to extract memories for
  * @returns Status of the debounce operation
  */
 export async function debounceMemoryExtraction(userId: string) {
-  const jobId = `extract-${userId}`;
+  const deduplicationId = `extract-${userId}`;
+  const jobId = deduplicationId;
 
   try {
-    // Get existing job if it exists
-    const existingJob = await memoryQueue.getJob(jobId);
+    // Check if there's an existing job being deduplicated
+    const existingJobId = await memoryQueue.getDeduplicationJobId(
+      deduplicationId,
+    );
 
-    if (existingJob) {
-      const state = await existingJob.getState();
+    if (existingJobId) {
+      const existingJob = await memoryQueue.getJob(existingJobId);
 
-      // If already processing, don't interrupt
-      if (state === "active") {
-        return {
-          status: "processing" as const,
-          jobId,
-        };
-      }
+      if (existingJob) {
+        const state = await existingJob.getState();
 
-      // If delayed or waiting, check if we've been waiting too long
-      if (state === "delayed" || state === "waiting") {
-        const firstQueued = existingJob.timestamp; // When first added
-        const now = Date.now();
-
-        // If we've been debouncing for more than MAX_WAIT, let it run
-        if (now - firstQueued > MEMORY_QUEUE_CONFIG.maxWait) {
+        // If already processing, don't interrupt
+        if (state === "active") {
           return {
-            status: "max_wait_reached" as const,
-            jobId,
+            status: "processing" as const,
+            jobId: existingJob.id,
           };
         }
 
-        // Otherwise, reset the debounce timer by removing and re-adding
-        await existingJob.remove();
+        // Check if we've been debouncing too long (maxWait protection)
+        const firstQueued = existingJob.timestamp;
+        const now = Date.now();
+
+        if (now - firstQueued > MEMORY_QUEUE_CONFIG.maxWait) {
+          // Remove deduplication key to allow immediate execution
+          await memoryQueue.removeDeduplicationKey(deduplicationId);
+
+          // Add job without delay for immediate execution
+          const immediateJob = await memoryQueue.add(
+            "extract-memory",
+            { userId },
+            {
+              jobId: `${jobId}-immediate-${Date.now()}`,
+              priority: 1,
+            },
+          );
+
+          return {
+            status: "max_wait_reached" as const,
+            jobId: immediateJob.id,
+          };
+        }
       }
     }
 
-    // Add new delayed job
+    // Add job with native deduplication in debounce mode
+    // BullMQ will automatically handle extending TTL and replacing data
+    const deduplicationOptions = MEMORY_QUEUE_CONFIG.getDeduplicationOptions(
+      MEMORY_QUEUE_CONFIG.debounceDelay,
+    );
+
     const job = await memoryQueue.add(
       "extract-memory",
       { userId },
       {
         jobId,
         delay: MEMORY_QUEUE_CONFIG.debounceDelay,
+        deduplication: {
+          ...deduplicationOptions,
+          id: deduplicationId,
+        },
       },
     );
 
     return {
       status: "debounced" as const,
-      jobId: job.id,
+      jobId: job.id ?? jobId,
     };
   } catch (error) {
     console.error("Error debouncing memory extraction:", error);
