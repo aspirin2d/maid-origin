@@ -11,6 +11,7 @@ import {
   type StoryHandlerContext,
 } from "./handlers/index.ts";
 import { Response } from "./openai.ts";
+import { debounceMemoryExtraction } from "./queue/index.ts";
 
 type StoryInsert = typeof story.$inferInsert;
 const storyRoute = new Hono<AppEnv>();
@@ -358,6 +359,14 @@ storyRoute.post("/generate-story", async (c) => {
           content: msg.content,
         })),
       );
+
+      // Debounce memory extraction after inserting messages
+      // This will schedule extraction to run after a delay, resetting the timer
+      // if more messages are added before the delay expires
+      debounceMemoryExtraction(user.id).catch((error) => {
+        console.error("Failed to queue memory extraction:", error);
+        // Don't fail the request if queue fails
+      });
     } catch (error) {
       console.error("Failed to persist generated messages", error);
       return c.json({ error: "Unable to store generated messages" }, 500);

@@ -7,6 +7,16 @@ import { authMiddleware, type AppEnv } from "./auth.ts";
 import { env } from "./env.ts";
 import { memoryRoute } from "./memory/index.ts";
 import { storyRoute } from "./story.ts";
+import {
+  closeMemoryWorker,
+  closeRedisConnection,
+  memoryWorker,
+} from "./queue/index.ts";
+
+// Initialize worker (import triggers worker creation)
+if (memoryWorker) {
+  console.log("Memory extraction worker initialized");
+}
 
 const app = new Hono<AppEnv>();
 
@@ -64,8 +74,16 @@ const server = serve(
 );
 
 // Graceful shutdown
-const gracefulShutdown = (signal: string) => {
+const gracefulShutdown = async (signal: string) => {
   console.log(`\n${signal} received, shutting down gracefully...`);
+
+  // Close worker and redis connection
+  try {
+    await closeMemoryWorker();
+    await closeRedisConnection();
+  } catch (error) {
+    console.error("Error closing worker/redis:", error);
+  }
 
   // Close server
   server.close(() => {
