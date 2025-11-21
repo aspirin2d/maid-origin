@@ -12,9 +12,11 @@
   "packageManager": "pnpm@10.19.0",
   "dependencies": {
     "@hono/node-server": "^1.19.6",
+    "bullmq": "^5.64.1",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.44.7",
     "hono": "^4.10.6",
+    "ioredis": "^5.8.2",
     "openai": "^6.9.1",
     "pg": "^8.16.3",
     "zod": "^4.1.12"
