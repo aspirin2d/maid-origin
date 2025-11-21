@@ -28,9 +28,10 @@ extractionWorker.on("completed", (job) => {
 
 export async function addExtractionJob(uid: string) {
   extractionQueue.add("memory-extraction", uid, {
+    // debounce mode
     deduplication: {
       id: uid + "-extraction",
-      ttl: env.isTest ? 1000 : 60_000,
+      ttl: env.isTest ? 1100 : 60_100,
       extend: true,
     },
     delay: env.isTest ? 1000 : 60_000,
