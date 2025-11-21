@@ -29,8 +29,7 @@ const inputSchema = z.object({
 
 export const simpleHandler: StoryHandler<typeof outputSchema> = {
   name: "simple",
-  description:
-    "Basic handler that turns stored story messages and the latest input into a single LLM prompt.",
+  description: "Simple story handler.",
   async beforeGenerate(context: StoryHandlerContext) {
     const storyId = storyIdSchema.parse(context.storyId);
     const historyMessages = (
@@ -59,16 +58,13 @@ export const simpleHandler: StoryHandler<typeof outputSchema> = {
       "## Conversation so far:",
       formattedHistory.length > 0
         ? formattedHistory.join("\n")
-        : "No previous conversation available.",
+        : "(No previous conversation available)",
       "",
-      "## Current request",
+      "## Current request:",
       parsed.question,
     ];
     const prompt = promptSections.join("\n");
-    const promptMessage: MessageInsert = {
-      contentType: "prompt",
-      content: prompt,
-    };
+
     const inputMessage: MessageInsert = {
       contentType: "input",
       content: parsed,
@@ -77,7 +73,9 @@ export const simpleHandler: StoryHandler<typeof outputSchema> = {
     return {
       prompt,
       responseSchema: outputSchema,
-      insertMessages: [promptMessage, inputMessage],
+      // don't save prompt
+      // insertMessages: [inputMessage],
+      insertMessages: [inputMessage],
     };
   },
   async afterGenerate(
@@ -96,7 +94,7 @@ export const simpleHandler: StoryHandler<typeof outputSchema> = {
       return `User: ${message.content.question}`;
     }
     if (message.contentType === "response") {
-      return `User: ${message.content.answer}`;
+      return `Assistant: ${message.content.answer}`;
     }
 
     throw new Error("Unsupported content type: " + message.contentType);
