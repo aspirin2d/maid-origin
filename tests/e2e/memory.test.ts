@@ -88,6 +88,24 @@ async function waitForJobCompletion(
   throw new Error(`Job ${jobId} did not complete within ${timeoutMs}ms`);
 }
 
+async function waitForDelayedJob(
+  timeoutMs: number = 2000,
+): Promise<string> {
+  const start = Date.now();
+
+  while (Date.now() - start < timeoutMs) {
+    const delayedJobs = await memoryQueue.getJobs(["delayed"]);
+    if (delayedJobs.length > 0 && delayedJobs[0]?.id) {
+      return delayedJobs[0].id;
+    }
+
+    // Wait before checking again
+    await new Promise((r) => setTimeout(r, 50));
+  }
+
+  throw new Error(`No delayed job found within ${timeoutMs}ms`);
+}
+
 beforeEach(async () => {
   // Clean queue before each test
   await memoryQueue.drain();
@@ -154,21 +172,14 @@ test("user conversation can be converted into memories with debounced and manual
     // Send conversation messages - this should trigger debounced extraction
     await sendConversationMessages(conversationPrompts);
 
-    // Verify debounced job was created
-    console.log("Checking for debounced extraction job...");
-    const delayedJobs = await memoryQueue.getJobs(["delayed"]);
-    expect(
-      delayedJobs.length,
-      "Debounced extraction job should be queued",
-    ).toBeGreaterThanOrEqual(1);
-
-    const jobId = delayedJobs[0]?.id;
-    expect(jobId, "Job ID should exist").toBeDefined();
-    console.log(`Waiting for debounced job ${jobId} to complete...`);
+    // Wait for debounced job to be created (it's async and not awaited)
+    console.log("Waiting for debounced extraction job to be queued...");
+    const jobId = await waitForDelayedJob();
+    console.log(`Debounced job ${jobId} found, waiting for completion...`);
 
     // Wait for debounced extraction to complete automatically
     const stats = await waitForJobCompletion(
-      jobId!,
+      jobId,
       MEMORY_QUEUE_CONFIG.debounceDelay + 2000,
     );
 
