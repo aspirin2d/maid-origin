@@ -1,10 +1,6 @@
-import { expect, test, beforeEach, afterEach } from "vitest";
+import { expect, test } from "vitest";
 
 import { getApiBaseUrl, loginAndGetBearerToken } from "./helpers.ts";
-import {
-  memoryQueue,
-  MEMORY_QUEUE_CONFIG,
-} from "../../src/queue/index.ts";
 
 type StoryResponse = {
   story?: { id: number; handler: string; name: string };
@@ -60,47 +56,7 @@ async function expectJsonResponse<T>(
   return (await response.json()) as T;
 }
 
-async function waitForJobCompletion(
-  jobId: string,
-  timeoutMs: number = 5000,
-): Promise<any> {
-  const start = Date.now();
-
-  while (Date.now() - start < timeoutMs) {
-    const job = await memoryQueue.getJob(jobId);
-    if (!job) {
-      throw new Error(`Job ${jobId} not found`);
-    }
-
-    const state = await job.getState();
-    if (state === "completed") {
-      return job.returnvalue;
-    }
-
-    if (state === "failed") {
-      throw new Error(`Job ${jobId} failed: ${job.failedReason}`);
-    }
-
-    // Wait before checking again
-    await new Promise((r) => setTimeout(r, 50));
-  }
-
-  throw new Error(`Job ${jobId} did not complete within ${timeoutMs}ms`);
-}
-
-beforeEach(async () => {
-  // Clean queue before each test
-  await memoryQueue.drain();
-  await memoryQueue.clean(0, 0);
-});
-
-afterEach(async () => {
-  // Clean up after tests
-  await memoryQueue.drain();
-  await memoryQueue.clean(0, 0);
-});
-
-test("user conversation can be converted into memories with debounced and manual extraction", async () => {
+test("user conversation can be converted into memories", async () => {
   const token = await loginAndGetBearerToken();
   const baseUrl = getApiBaseUrl();
   const authHeaders = {
@@ -151,29 +107,16 @@ test("user conversation can be converted into memories with debounced and manual
       }
     };
 
-    // Send conversation messages - this should trigger debounced extraction
     await sendConversationMessages(conversationPrompts);
+    const extractionResponse = await fetch(`${baseUrl}/api/memory-extraction`, {
+      method: "POST",
+      headers: authHeaders,
+    });
+    const extraction =
+      await expectJsonResponse<MemoryExtractionResponse>(extractionResponse);
+    expect(extraction.stats, "Extraction must return stats").toBeTruthy();
+    const stats = extraction.stats!;
 
-    // Verify debounced job was created
-    console.log("Checking for debounced extraction job...");
-    const delayedJobs = await memoryQueue.getJobs(["delayed"]);
-    expect(
-      delayedJobs.length,
-      "Debounced extraction job should be queued",
-    ).toBeGreaterThanOrEqual(1);
-
-    const jobId = delayedJobs[0]?.id;
-    expect(jobId, "Job ID should exist").toBeDefined();
-    console.log(`Waiting for debounced job ${jobId} to complete...`);
-
-    // Wait for debounced extraction to complete automatically
-    const stats = await waitForJobCompletion(
-      jobId!,
-      MEMORY_QUEUE_CONFIG.debounceDelay + 2000,
-    );
-
-    console.log("Debounced extraction completed:", stats);
-    expect(stats, "Extraction must return stats").toBeDefined();
     expect(stats.messagesExtracted).toBeGreaterThanOrEqual(
       conversationPrompts.length * 2,
     );
@@ -227,14 +170,12 @@ test("user conversation can be converted into memories with debounced and manual
       }
     }
 
-    // Test manual extraction (immediate, not debounced)
     const followupPrompts = [
       `Quick correction: I told you earlier that I live in Portland, but I actually moved to Seattle, Washington last week—please update that memory for me.`,
       `I'm planning a backpacking trip across Patagonia next May.`,
     ];
     await sendConversationMessages(followupPrompts);
 
-    console.log("Triggering manual extraction via API...");
     const secondExtractionResponse = await fetch(
       `${baseUrl}/api/memory-extraction`,
       {
@@ -246,7 +187,6 @@ test("user conversation can be converted into memories with debounced and manual
       secondExtractionResponse,
     );
     const secondStats = secondExtraction.stats!;
-    console.log("Manual extraction completed:", secondStats);
     expect(secondStats.messagesExtracted).toBeGreaterThanOrEqual(
       followupPrompts.length * 2,
     );
