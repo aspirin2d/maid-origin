@@ -31,7 +31,7 @@ export const memoryQueueEvents = new QueueEvents(
  * @returns Status of the debounce operation
  */
 export async function debounceMemoryExtraction(userId: string) {
-  const jobId = `extract:${userId}`;
+  const jobId = `extract-${userId}`;
 
   try {
     // Get existing job if it exists
@@ -93,7 +93,7 @@ export async function debounceMemoryExtraction(userId: string) {
  * @returns Job ID
  */
 export async function triggerMemoryExtraction(userId: string) {
-  const jobId = `extract:${userId}:manual:${Date.now()}`;
+  const jobId = `extract-${userId}-manual-${Date.now()}`;
 
   const job = await memoryQueue.add(
     "extract-memory",
