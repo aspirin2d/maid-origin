@@ -8,7 +8,7 @@ export const MEMORY_QUEUE_CONFIG = {
   queueName: "memory-extraction",
 
   // Debounce delay: wait this long after last message before extracting
-  debounceDelay: env.isTest ? 100 : 30000, // 100ms in tests, 30s in production
+  debounceDelay: env.isTest ? 300 : 30000, // 300ms in tests, 30s in production
 
   // Max wait: even if messages keep coming, extract after this long
   maxWait: env.isTest ? 500 : 300000, // 500ms in tests, 5 minutes in production
