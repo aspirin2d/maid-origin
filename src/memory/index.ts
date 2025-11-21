@@ -62,11 +62,15 @@ function normalizeQueryValue(value: string | undefined) {
 
 export const memoryRoute = new Hono<AppEnv>();
 
-memoryRoute.post("/memory-extraction", async (c) => {
-  const user = c.get("user");
-  if (!user) {
+memoryRoute.use("*", async (c, next) => {
+  if (!c.get("user")) {
     return c.json({ error: "User missing from request context" }, 500);
   }
+  await next();
+});
+
+memoryRoute.post("/memory-extraction", async (c) => {
+  const user = c.get("user")!;
 
   try {
     const stats = await extractMemory(user.id);
@@ -78,10 +82,7 @@ memoryRoute.post("/memory-extraction", async (c) => {
 });
 
 memoryRoute.get("/list-memories", async (c) => {
-  const user = c.get("user");
-  if (!user) {
-    return c.json({ error: "User missing from request context" }, 500);
-  }
+  const user = c.get("user")!;
 
   const rawQuery = c.req.query();
   const parsed = listMemoriesQuerySchema.safeParse({
@@ -127,10 +128,7 @@ memoryRoute.get("/list-memories", async (c) => {
 });
 
 memoryRoute.post("/delete-memories", async (c) => {
-  const user = c.get("user");
-  if (!user) {
-    return c.json({ error: "User missing from request context" }, 500);
-  }
+  const user = c.get("user")!;
 
   try {
     const deleted = await db

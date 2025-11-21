@@ -27,6 +27,10 @@ export async function bulkSearchSimilarMemories(
     minSimilarity?: number;
   },
 ): Promise<MemorySearchResult[][]> {
+  if (queries.length === 0) {
+    return [];
+  }
+
   const topK = options?.topK ?? 5;
   const minSimilarity = options?.minSimilarity ?? 0;
 
@@ -76,4 +80,3 @@ export async function searchSimilarMemories(
     .orderBy((t) => desc(t.similarity))
     .limit(topK);
 }
-

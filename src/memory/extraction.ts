@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "../db/index.ts";
@@ -10,7 +10,7 @@ import {
   getFactRetrievalMessages,
   getUpdateMemoryMessages,
   MemoryUpdateSchema,
-} from "../prompts/memory.ts";
+} from "./prompt.ts";
 import { bulkSearchSimilarMemories } from "./search.ts";
 
 export type MemoryExtractionStats = {
@@ -28,6 +28,8 @@ type ExistingMemory = {
   text: string;
 };
 
+type LabeledFact = RetrievedFact & { id: string };
+
 type FactMetadata = Pick<
   RetrievedFact,
   "category" | "importance" | "confidence"
@@ -42,7 +44,7 @@ type PreparedDecision =
     }
   | {
       kind: "UPDATE";
-      memoryIndex: number;
+      memory: ExistingMemory;
       text: string;
       embeddingKey: string;
     };
@@ -80,19 +82,14 @@ export async function markMessagesAsExtracted(
 ) {
   if (messageIds.length === 0) return;
 
-  for (const msgId of messageIds) {
-    await executor
-      .update(message)
-      .set({ extracted: true })
-      .where(eq(message.id, msgId));
-  }
+  await executor
+    .update(message)
+    .set({ extracted: true })
+    .where(inArray(message.id, messageIds));
 }
 
-export async function extractMemory(
-  userId: string,
-): Promise<MemoryExtractionStats> {
-  // Gather the latest user-only messages that still need memory extraction.
-  const pendingMessages: Messages = await db
+async function loadPendingMessages(userId: string): Promise<Messages> {
+  return db
     .select({
       id: message.id,
       contentType: message.contentType,
@@ -100,7 +97,6 @@ export async function extractMemory(
       extracted: message.extracted,
       createdAt: message.createdAt,
       updatedAt: message.updatedAt,
-
       storyId: story.id,
       storyHandler: story.handler,
     })
@@ -108,6 +104,12 @@ export async function extractMemory(
     .innerJoin(story, eq(message.storyId, story.id))
     .where(and(eq(story.userId, userId), eq(message.extracted, false)))
     .orderBy(asc(message.createdAt));
+}
+
+export async function extractMemory(
+  userId: string,
+): Promise<MemoryExtractionStats> {
+  const pendingMessages = await loadPendingMessages(userId);
 
   if (pendingMessages.length === 0) {
     return EMPTY_STATS;
@@ -134,14 +136,17 @@ export async function extractMemory(
     userId,
     factEmbeddings,
   });
-  const startFactId = existingMemories.length + 1;
+  const labeledFacts: LabeledFact[] = facts.map((fact, index) => ({
+    ...fact,
+    id: String(existingMemories.length + index + 1),
+  }));
 
   const unifiedExisting = existingMemories.map(({ unifiedId, text }) => ({
     id: unifiedId,
     text,
   }));
-  const unifiedNewFacts = facts.map((fact, index) => ({
-    id: String(startFactId + index),
+  const unifiedNewFacts = labeledFacts.map((fact) => ({
+    id: fact.id,
     text: fact.text,
     category: fact.category,
     importance: fact.importance,
@@ -162,10 +167,9 @@ export async function extractMemory(
   // Translate LLM output into concrete DB operations and batch any
   // additional embeddings that we still need before touching the DB.
   const decisionPlan = await buildDecisionPlan({
-    facts,
+    labeledFacts,
     factEmbeddings,
     existingMemories,
-    startFactId,
     decisions: memoryUpdateOutput.memory,
   });
 
@@ -174,7 +178,6 @@ export async function extractMemory(
   const { memoriesAdded, memoriesUpdated } = await applyDecisionPlan({
     userId,
     plan: decisionPlan,
-    existingMemories,
     messageIds: pendingMessages.map((msg) => msg.id),
   });
 
@@ -248,44 +251,50 @@ async function buildExistingMemoryContext(params: {
 }
 
 async function buildDecisionPlan(params: {
-  facts: RetrievedFact[];
+  labeledFacts: LabeledFact[];
   factEmbeddings: number[][];
   existingMemories: ExistingMemory[];
-  startFactId: number;
   decisions: MemoryUpdateDecision[];
 }): Promise<DecisionPlan> {
   const embeddingByText = new Map<string, number[]>();
-  params.facts.forEach((fact, index) => {
-    if (!embeddingByText.has(fact.text)) {
-      embeddingByText.set(fact.text, params.factEmbeddings[index]!);
+  params.labeledFacts.forEach((fact, index) => {
+    const embedding = params.factEmbeddings[index];
+    if (embedding) {
+      embeddingByText.set(fact.text, embedding);
     }
   });
+
+  const factById = new Map(
+    params.labeledFacts.map((fact) => [fact.id, fact]),
+  );
+  const memoryById = new Map(
+    params.existingMemories.map((memory) => [memory.unifiedId, memory]),
+  );
 
   const textsToEmbed: string[] = [];
   const pendingEmbeddingTexts = new Set<string>();
   const queueEmbedding = (text: string) => {
-    if (!text || embeddingByText.has(text) || pendingEmbeddingTexts.has(text)) {
+    if (embeddingByText.has(text) || pendingEmbeddingTexts.has(text)) {
       return;
     }
     pendingEmbeddingTexts.add(text);
     textsToEmbed.push(text);
   };
 
+  const normalize = (value: string | undefined) => {
+    const trimmed = value?.trim();
+    return trimmed?.length ? trimmed : undefined;
+  };
+
   const prepared: PreparedDecision[] = [];
   for (const decision of params.decisions) {
-    const decisionId = parseInt(decision.id, 10);
-    if (Number.isNaN(decisionId)) {
-      continue;
-    }
-
     if (decision.event === "ADD") {
-      const factIndex = decisionId - params.startFactId;
-      if (factIndex < 0 || factIndex >= params.facts.length) {
+      const fact = factById.get(decision.id);
+      if (!fact) {
         continue;
       }
 
-      const fact = params.facts[factIndex]!;
-      const text = decision.text?.length ? decision.text : fact.text;
+      const text = normalize(decision.text) ?? fact.text;
       queueEmbedding(text);
       prepared.push({
         kind: "ADD",
@@ -297,31 +306,31 @@ async function buildDecisionPlan(params: {
         },
         embeddingKey: text,
       });
-    } else if (decision.event === "UPDATE") {
-      const memoryIndex = decisionId - 1;
-      if (memoryIndex < 0 || memoryIndex >= params.existingMemories.length) {
-        continue;
-      }
-
-      const text = decision.text;
-      queueEmbedding(text);
-      prepared.push({
-        kind: "UPDATE",
-        memoryIndex,
-        text,
-        embeddingKey: text,
-      });
+      continue;
     }
+
+    const targetMemory = memoryById.get(decision.id);
+    const text = normalize(decision.text);
+    if (!targetMemory || !text) {
+      continue;
+    }
+
+    queueEmbedding(text);
+    prepared.push({
+      kind: "UPDATE",
+      memory: targetMemory,
+      text,
+      embeddingKey: text,
+    });
   }
 
   const overrideEmbeddings =
     textsToEmbed.length > 0 ? await Embed(textsToEmbed) : [];
   textsToEmbed.forEach((text, index) => {
     const embedding = overrideEmbeddings[index];
-    if (!embedding) {
-      return;
+    if (embedding) {
+      embeddingByText.set(text, embedding);
     }
-    embeddingByText.set(text, embedding);
   });
 
   return {
@@ -333,7 +342,6 @@ async function buildDecisionPlan(params: {
 async function applyDecisionPlan(params: {
   userId: string;
   plan: DecisionPlan;
-  existingMemories: ExistingMemory[];
   messageIds: number[];
 }): Promise<{
   memoriesAdded: number;
@@ -363,20 +371,15 @@ async function applyDecisionPlan(params: {
         continue;
       }
 
-      const targetMemory = params.existingMemories[decision.memoryIndex];
-      if (!targetMemory) {
-        continue;
-      }
-
       await tx
         .update(memory)
         .set({
           content: decision.text,
-          prevContent: targetMemory.text,
+          prevContent: decision.memory.text,
           embedding,
           action: "UPDATE",
         })
-        .where(eq(memory.id, targetMemory.originalId));
+        .where(eq(memory.id, decision.memory.originalId));
       memoriesUpdated++;
     }
 
