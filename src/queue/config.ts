@@ -22,6 +22,14 @@ export const MEMORY_QUEUE_CONFIG = {
     duration: 1000,
   },
 
+  // Deduplication options for debounce mode
+  getDeduplicationOptions: (debounceDelay: number) => ({
+    id: "", // Will be set per-job
+    ttl: debounceDelay, // TTL matches delay for debounce behavior
+    extend: true, // Extends TTL on each new attempt
+    replace: true, // Replaces job data with latest
+  }),
+
   // Job options
   defaultJobOptions: {
     attempts: 3,
