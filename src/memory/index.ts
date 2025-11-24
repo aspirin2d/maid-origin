@@ -6,7 +6,6 @@ import { z } from "zod";
 import type { AppEnv } from "../auth.ts";
 import { db } from "../db/index.ts";
 import { memory } from "../db/schema.ts";
-import { extractMemory } from "./extraction.ts";
 
 const sortableMemoryFields = [
   "id",
@@ -62,25 +61,6 @@ function normalizeQueryValue(value: string | undefined) {
 
 export const memoryRoute = new Hono<AppEnv>();
 
-memoryRoute.use("*", async (c, next) => {
-  if (!c.get("user")) {
-    return c.json({ error: "User missing from request context" }, 500);
-  }
-  await next();
-});
-
-memoryRoute.post("/memory-extraction", async (c) => {
-  const user = c.get("user")!;
-
-  try {
-    const stats = await extractMemory(user.id);
-    return c.json({ stats });
-  } catch (error) {
-    console.error("Memory extraction failed", error);
-    return c.json({ error: "Failed to extract memory" }, 500);
-  }
-});
-
 memoryRoute.get("/list-memories", async (c) => {
   const user = c.get("user")!;
 
@@ -127,7 +107,7 @@ memoryRoute.get("/list-memories", async (c) => {
   }
 });
 
-memoryRoute.post("/delete-memories", async (c) => {
+memoryRoute.post("/prune-memories", async (c) => {
   const user = c.get("user")!;
 
   try {

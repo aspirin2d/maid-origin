@@ -273,3 +273,31 @@ test("authenticated user can generate a story response", async () => {
     }).catch(() => undefined);
   }
 }, 30_000);
+
+test("generate-story returns 404 for an unknown story", async () => {
+  const token = await loginAndGetBearerToken();
+  const baseUrl = getApiBaseUrl();
+  const jsonHeaders = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  } as const;
+
+  // Pick a very large id to avoid collisions with any seeded data.
+  const nonexistentStoryId = 9_000_000 + Math.floor(Math.random() * 1_000_000);
+
+  const response = await fetch(`${baseUrl}/api/generate-story`, {
+    method: "POST",
+    headers: jsonHeaders,
+    body: JSON.stringify({
+      storyId: nonexistentStoryId,
+      input: { question: "Does this story exist?" },
+    }),
+  });
+
+  expect(response.status).toBe(404);
+  const body = (await response.json().catch(() => ({}))) as {
+    error?: string;
+  };
+  expect(body.error).toMatch(/not found/i);
+}, 10_000);

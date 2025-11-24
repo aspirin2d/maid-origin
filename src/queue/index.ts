@@ -1,21 +1,19 @@
 import { Queue, Worker } from "bullmq";
-import { Redis } from "ioredis";
 import { extractMemory } from "../memory/extraction.ts";
 import { env } from "../env.ts";
 
-const connection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
-const extractionQueue = new Queue("memory-extraction-queue", {
-  connection,
+const QUEUE_NAME = "memory-extraction";
+const extractionQueue = new Queue(QUEUE_NAME, {
+  connection: {
+    url: env.REDIS_URL,
+  },
 });
-
 const extractionWorker = new Worker(
-  "memory-extraction",
+  QUEUE_NAME,
   async (job) => {
     await extractMemory(job.data.uid);
   },
-  {
-    connection,
-  },
+  { connection: { url: env.REDIS_URL } },
 );
 
 extractionWorker.on("active", (job) => {
@@ -27,13 +25,17 @@ extractionWorker.on("completed", (job) => {
 });
 
 export async function addExtractionJob(uid: string) {
-  extractionQueue.add("memory-extraction", uid, {
-    // debounce mode
-    deduplication: {
-      id: uid + "-extraction",
-      ttl: env.isTest ? 1100 : 60_100,
-      extend: true,
+  await extractionQueue.add(
+    QUEUE_NAME,
+    { uid },
+    {
+      // debounce mode
+      deduplication: {
+        id: uid + "Extraction",
+        ttl: !env.isProduction ? 1200 : 60_200,
+        extend: true,
+      },
+      delay: !env.isProduction ? 1000 : 60_000,
     },
-    delay: env.isTest ? 1000 : 60_000,
-  });
+  );
 }

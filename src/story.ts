@@ -11,6 +11,7 @@ import {
   type StoryHandlerContext,
 } from "./handlers/index.ts";
 import { Response } from "./openai.ts";
+import { addExtractionJob } from "./queue/index.ts";
 
 type StoryInsert = typeof story.$inferInsert;
 const storyRoute = new Hono<AppEnv>();
@@ -362,6 +363,9 @@ storyRoute.post("/generate-story", async (c) => {
       console.error("Failed to persist generated messages", error);
       return c.json({ error: "Unable to store generated messages" }, 500);
     }
+
+    // add memory extraction job
+    await addExtractionJob(user.id);
   }
 
   return c.json({
