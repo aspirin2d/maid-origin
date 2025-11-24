@@ -31,7 +31,6 @@ export interface StoryHandler<T extends ZodType> {
 }
 
 const registeredStoryHandlers = [simpleHandler] as const;
-
 export type RegisteredStoryHandler = (typeof registeredStoryHandlers)[number];
 
 export function getStoryHandlerByName(name: string): RegisteredStoryHandler {

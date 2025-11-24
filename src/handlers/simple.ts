@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "../db/index.ts";
@@ -87,12 +87,7 @@ export const simpleHandler: StoryHandler<typeof outputSchema> = {
       await db
         .select({ contentType: message.contentType, content: message.content })
         .from(message)
-        .where(
-          and(
-            eq(message.storyId, storyId),
-            eq(message.extracted, false), // don't pull out already extracted messages
-          ),
-        )
+        .where(eq(message.storyId, storyId))
         .orderBy(desc(message.createdAt), desc(message.id))
         .limit(20)
     ).reverse();
