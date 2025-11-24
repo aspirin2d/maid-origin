@@ -13,7 +13,7 @@ const extractionWorker = new Worker(
   async (job) => {
     await extractMemory(job.data.uid);
   },
-  { connection: { url: env.REDIS_URL } },
+  { connection: { url: env.REDIS_URL }, concurrency: 5 },
 );
 
 extractionWorker.on("active", (job) => {

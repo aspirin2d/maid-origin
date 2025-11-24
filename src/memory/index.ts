@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { AppEnv } from "../auth.ts";
 import { db } from "../db/index.ts";
 import { memory } from "../db/schema.ts";
+import { env } from "../env.ts";
 
 const sortableMemoryFields = [
   "id",
@@ -108,6 +109,10 @@ memoryRoute.get("/list-memories", async (c) => {
 });
 
 memoryRoute.post("/prune-memories", async (c) => {
+  if (env.isProduction) {
+    return c.json({ error: "Endpoint disabled in production" }, 404);
+  }
+
   const user = c.get("user")!;
 
   try {
