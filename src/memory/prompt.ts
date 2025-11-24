@@ -78,10 +78,9 @@ EXAMPLES:
 "I run on weekends" → {"text": "User runs on weekends", "category": "USER_GOAL", "importance": 0.6, "confidence": 0.9}
 
 RULES:
-1. Extract from user messages only
-2. Use latest information if corrected
-3. Never fabricate facts
-4. Be precise with importance and confidence scores
+1. Use latest information if corrected
+2. Never fabricate facts
+3. Be precise with importance and confidence scores
 
 Extract facts from this conversation:
 
