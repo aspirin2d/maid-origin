@@ -264,9 +264,7 @@ async function buildDecisionPlan(params: {
     }
   });
 
-  const factById = new Map(
-    params.labeledFacts.map((fact) => [fact.id, fact]),
-  );
+  const factById = new Map(params.labeledFacts.map((fact) => [fact.id, fact]));
   const memoryById = new Map(
     params.existingMemories.map((memory) => [memory.unifiedId, memory]),
   );

@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "../db/index.ts";
@@ -126,8 +126,6 @@ export const simpleHandler: StoryHandler<typeof outputSchema> = {
     return {
       prompt,
       responseSchema: outputSchema,
-      // don't save prompt
-      // insertMessages: [inputMessage],
       insertMessages: [inputMessage],
     };
   },
