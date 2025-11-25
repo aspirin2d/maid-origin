@@ -159,9 +159,10 @@ export const simpleHandler: StoryHandler<
   },
 };
 
-function parseStoredMessage(
-  record: { contentType: string; content: unknown },
-): SimpleMessage | null {
+function parseStoredMessage(record: {
+  contentType: string;
+  content: unknown;
+}): SimpleMessage | null {
   if (record.contentType === "input") {
     const parsed = inputSchema.safeParse(record.content);
     if (parsed.success) {

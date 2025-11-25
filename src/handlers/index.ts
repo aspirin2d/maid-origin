@@ -36,16 +36,10 @@ export interface StoryHandler<
     context: StoryHandlerContext<z.output<TInputSchema>>,
     response: z.output<TResponseSchema>,
   ): Promise<
-    MessageInsert<
-      z.output<TInputSchema>,
-      z.output<TResponseSchema>
-    >[]
+    MessageInsert<z.output<TInputSchema>, z.output<TResponseSchema>>[]
   >;
   messageToString(
-    message: MessageInsert<
-      z.output<TInputSchema>,
-      z.output<TResponseSchema>
-    >,
+    message: MessageInsert<z.output<TInputSchema>, z.output<TResponseSchema>>,
   ): string;
 }
 
@@ -54,9 +48,7 @@ export type RegisteredStoryHandler = (typeof registeredStoryHandlers)[number];
 
 export function getStoryHandlerByName<
   TName extends RegisteredStoryHandler["name"],
->(
-  name: TName,
-): Extract<RegisteredStoryHandler, { name: TName }> {
+>(name: TName): Extract<RegisteredStoryHandler, { name: TName }> {
   const handler = registeredStoryHandlers.find(
     (candidate) => candidate.name === name,
   );
