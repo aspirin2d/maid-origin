@@ -31,7 +31,7 @@ export async function addExtractionJob(uid: string) {
     {
       // debounce mode
       deduplication: {
-        id: uid + "Extraction",
+        id: uid + "-extraction",
         ttl: env.isProduction ? 900_200 : 20_200, // in production 15m, otherwise 20s
         extend: true,
         replace: true,
