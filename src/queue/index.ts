@@ -32,10 +32,11 @@ export async function addExtractionJob(uid: string) {
       // debounce mode
       deduplication: {
         id: uid + "Extraction",
-        ttl: !env.isProduction ? 1200 : 60_200,
+        ttl: env.isProduction ? 900_200 : 20_200, // in production 15m, otherwise 20s
         extend: true,
+        replace: true,
       },
-      delay: !env.isProduction ? 1000 : 60_000,
+      delay: env.isProduction ? 900_000 : 20_000,
     },
   );
 }
