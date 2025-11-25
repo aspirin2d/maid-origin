@@ -32,6 +32,10 @@ const inputSchema = z.object({
     .describe("User's input"),
 });
 
+type SimpleInput = z.output<typeof inputSchema>;
+type SimpleResponse = z.output<typeof outputSchema>;
+type SimpleMessage = MessageInsert<SimpleInput, SimpleResponse>;
+
 const MAX_MEMORY_RESULTS = 5;
 const MIN_MEMORY_SIMILARITY = 0;
 
@@ -78,10 +82,15 @@ function formatMemories(memories: MemorySearchResult[]): string {
     .join("\n");
 }
 
-export const simpleHandler: StoryHandler<typeof outputSchema> = {
+export const simpleHandler: StoryHandler<
+  typeof inputSchema,
+  typeof outputSchema
+> = {
   name: "simple",
   description: "Simple story handler.",
-  async beforeGenerate(context: StoryHandlerContext) {
+  inputSchema,
+  responseSchema: outputSchema,
+  async beforeGenerate(context: StoryHandlerContext<SimpleInput>) {
     const storyId = storyIdSchema.parse(context.storyId);
     const historyMessages = (
       await db
@@ -97,12 +106,10 @@ export const simpleHandler: StoryHandler<typeof outputSchema> = {
       context.user.id,
       parsed.question,
     );
-    const formattedHistory = historyMessages.map((msg) => {
-      return this.messageToString({
-        contentType: msg.contentType,
-        content: msg.content,
-      });
-    });
+    const formattedHistory = historyMessages
+      .map((msg) => parseStoredMessage(msg))
+      .filter((msg): msg is SimpleMessage => msg !== null)
+      .map((msg) => this.messageToString(msg));
     const promptSections = [
       `You are a helpful assistant. Answer the user's question in JSON format that matches the provided schema.`,
       "## Conversation so far:",
@@ -118,7 +125,7 @@ export const simpleHandler: StoryHandler<typeof outputSchema> = {
     ];
     const prompt = promptSections.join("\n");
 
-    const inputMessage: MessageInsert = {
+    const inputMessage: SimpleMessage = {
       contentType: "input",
       content: parsed,
     };
@@ -130,17 +137,17 @@ export const simpleHandler: StoryHandler<typeof outputSchema> = {
     };
   },
   async afterGenerate(
-    context: StoryHandlerContext,
-    response: z.infer<typeof outputSchema>,
+    context: StoryHandlerContext<SimpleInput>,
+    response: SimpleResponse,
   ) {
     storyIdSchema.parse(context.storyId);
-    const responseMessage: MessageInsert = {
+    const responseMessage: SimpleMessage = {
       contentType: "response",
       content: response,
     };
     return [responseMessage];
   },
-  messageToString(message) {
+  messageToString(message: SimpleMessage) {
     if (message.contentType === "input") {
       return `User: ${message.content.question}`;
     }
@@ -148,6 +155,32 @@ export const simpleHandler: StoryHandler<typeof outputSchema> = {
       return `Assistant: ${message.content.answer}`;
     }
 
-    throw new Error("Unsupported content type: " + message.contentType);
+    return assertUnreachable(message);
   },
 };
+
+function parseStoredMessage(
+  record: { contentType: string; content: unknown },
+): SimpleMessage | null {
+  if (record.contentType === "input") {
+    const parsed = inputSchema.safeParse(record.content);
+    if (parsed.success) {
+      return { contentType: "input", content: parsed.data };
+    }
+    return null;
+  }
+
+  if (record.contentType === "response") {
+    const parsed = outputSchema.safeParse(record.content);
+    if (parsed.success) {
+      return { contentType: "response", content: parsed.data };
+    }
+    return null;
+  }
+
+  return null;
+}
+
+function assertUnreachable(_value: never): never {
+  throw new Error("Unsupported content type");
+}

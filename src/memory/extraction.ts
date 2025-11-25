@@ -3,7 +3,11 @@ import { z } from "zod";
 
 import { db } from "../db/index.ts";
 import { memory, message, story } from "../db/schema.ts";
-import { getStoryHandlerByName } from "../handlers/index.ts";
+import {
+  getStoryHandlerByName,
+  type MessageInsert,
+  type RegisteredStoryHandler,
+} from "../handlers/index.ts";
 import { Embed, Response } from "../openai.ts";
 import {
   FactRetrievalSchema,
@@ -206,12 +210,50 @@ function formatMessagesForFactExtraction(messages: Messages): string {
   return messages
     .map((msg) => {
       const handler = getStoryHandlerByName(msg.storyHandler);
-      return handler.messageToString({
-        contentType: msg.contentType,
-        content: msg.content,
-      });
+      const typedMessage = toHandlerMessage(handler, msg);
+      if (!typedMessage) {
+        return null;
+      }
+      return handler.messageToString(typedMessage);
     })
+    .filter((value): value is string => value !== null)
     .join("\n\n");
+}
+
+type HandlerInput<THandler extends RegisteredStoryHandler> = z.output<
+  THandler["inputSchema"]
+>;
+type HandlerResponse<THandler extends RegisteredStoryHandler> = z.output<
+  THandler["responseSchema"]
+>;
+
+function toHandlerMessage<THandler extends RegisteredStoryHandler>(
+  handler: THandler,
+  msg: Message,
+): MessageInsert<HandlerInput<THandler>, HandlerResponse<THandler>> | null {
+  if (msg.contentType === "input") {
+    const parsedInput = handler.inputSchema.safeParse(msg.content);
+    if (parsedInput.success) {
+      return {
+        contentType: "input",
+        content: parsedInput.data as HandlerInput<THandler>,
+      };
+    }
+    return null;
+  }
+
+  if (msg.contentType === "response") {
+    const parsedResponse = handler.responseSchema.safeParse(msg.content);
+    if (parsedResponse.success) {
+      return {
+        contentType: "response",
+        content: parsedResponse.data as HandlerResponse<THandler>,
+      };
+    }
+    return null;
+  }
+
+  return null;
 }
 
 async function buildExistingMemoryContext(params: {

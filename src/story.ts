@@ -52,7 +52,7 @@ const deleteStorySchema = z.object({
 
 const generateStorySchema = z.object({
   storyId: z.coerce.number().int(),
-  input: z.any(),
+  input: z.unknown(),
 });
 
 const sortableStoryFields = [
@@ -310,10 +310,17 @@ storyRoute.post("/generate-story", async (c) => {
   }
 
   const handler = getStoryHandlerByName(record.handler);
-  const handlerContext: StoryHandlerContext = {
+
+  const handlerInputResult = handler.inputSchema.safeParse(parsed.data.input);
+  if (!handlerInputResult.success) {
+    return c.json({ error: z.treeifyError(handlerInputResult.error) }, 400);
+  }
+
+  const handlerInput = handlerInputResult.data;
+  const handlerContext: StoryHandlerContext<typeof handlerInput> = {
     storyId: String(storyId),
     user,
-    input: parsed.data.input,
+    input: handlerInput,
   };
 
   let beforeGenerateResult;
