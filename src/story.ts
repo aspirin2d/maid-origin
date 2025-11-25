@@ -186,6 +186,7 @@ storyRoute.post("/delete-story", async (c) => {
 
   const record = deleted[0];
   if (!record) {
+    console.log("missing story:", storyId, user.id);
     return c.json({ error: "Story not found" }, 404);
   }
 
@@ -325,6 +326,7 @@ storyRoute.post("/generate-story", async (c) => {
 
   let modelResponse;
   try {
+    console.log("system prompt:", beforeGenerateResult.prompt);
     modelResponse = await Response(
       beforeGenerateResult.prompt,
       beforeGenerateResult.responseSchema,

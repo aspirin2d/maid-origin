@@ -11,7 +11,6 @@ export const userSchema = z.object({
 });
 
 const sessionSchema = z.object({
-  id: z.string(),
   userId: z.string(),
   expiresAt: z.iso.datetime(),
 });

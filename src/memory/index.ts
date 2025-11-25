@@ -1,4 +1,4 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -47,6 +47,14 @@ const listMemoriesQuerySchema = z.object({
   offset: nonNegativeIntegerParam.optional().nullish(),
   sortBy: z.enum(sortableMemoryFields).optional().nullish(),
   sortDirection: z.enum(["asc", "desc"]).optional().nullish(),
+});
+
+const memoryIdSchema = z.coerce.number().int().positive({
+  message: "Memory id must be a positive integer",
+});
+
+const deleteMemorySchema = z.object({
+  id: memoryIdSchema,
 });
 
 function normalizeQueryValue(value: string | undefined) {
@@ -106,6 +114,37 @@ memoryRoute.get("/list-memories", async (c) => {
     console.error("Failed to fetch memories", error);
     return c.json({ error: "Failed to fetch memories" }, 500);
   }
+});
+
+memoryRoute.post("/delete-memory", async (c) => {
+  const user = c.get("user")!;
+
+  let payload: unknown;
+  try {
+    payload = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const parsed = deleteMemorySchema.safeParse(payload);
+  if (!parsed.success) {
+    return c.json({ error: z.treeifyError(parsed.error) }, 400);
+  }
+
+  const memoryId = parsed.data.id;
+
+  const deleted = await db
+    .delete(memory)
+    .where(and(eq(memory.id, memoryId), eq(memory.userId, user.id)))
+    .returning();
+
+  const record = deleted[0];
+  if (!record) {
+    console.log("missing memory:", memoryId, user.id);
+    return c.json({ error: "Memory not found" }, 404);
+  }
+
+  return c.json({ memory: record });
 });
 
 memoryRoute.post("/prune-memories", async (c) => {

@@ -33,7 +33,7 @@ const inputSchema = z.object({
 });
 
 const MAX_MEMORY_RESULTS = 5;
-const MIN_MEMORY_SIMILARITY = 0.7;
+const MIN_MEMORY_SIMILARITY = 0;
 
 async function buildRelevantMemoriesSection(
   userId: string,
