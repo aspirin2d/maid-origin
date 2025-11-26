@@ -4,13 +4,13 @@ Hono + TypeScript service that powers story generation and memory extraction for
 
 ## Quick Start
 - Install deps: `pnpm install`
-- Create `.env` (see **Environment** below)
+- Copy `.env.example` to `.env` and fill in values
 - Run dev server: `pnpm dev` (defaults to `http://localhost:3010`)
 - Run unit tests: `pnpm test:unit`
 - Run e2e tests: `pnpm test:e2e`
 
 ## Environment
-Required variables (see `src/env.ts` for validation):
+Required variables (see `src/env.ts` for validation). Use `.env.example` as a template:
 - `PORT` (default `3010`)
 - `NODE_ENV` (`development` | `production` | `test`)
 - `BASE_URL` (defaults to `http://localhost:${PORT}`)
