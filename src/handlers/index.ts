@@ -2,6 +2,7 @@ import z from "zod";
 
 import type { ZodType } from "zod";
 import type { User } from "../auth.ts";
+import { liveHandler } from "./live/index.ts";
 import { simpleHandler } from "./simple.ts";
 
 export type MessageInsert<TInput, TResponse> =
@@ -43,7 +44,7 @@ export interface StoryHandler<
   ): string;
 }
 
-const registeredStoryHandlers = [simpleHandler] as const;
+const registeredStoryHandlers = [simpleHandler, liveHandler] as const;
 export type RegisteredStoryHandler = (typeof registeredStoryHandlers)[number];
 
 export function getStoryHandlerByName<
