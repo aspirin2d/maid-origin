@@ -334,10 +334,8 @@ storyRoute.post("/generate-story", async (c) => {
   let modelResponse;
   try {
     console.log("system prompt:", beforeGenerateResult.prompt);
-    modelResponse = await Response(
-      beforeGenerateResult.prompt,
-      beforeGenerateResult.responseSchema,
-    );
+    const responseSchema = handler.responseSchema;
+    modelResponse = await Response(beforeGenerateResult.prompt, responseSchema);
   } catch (error) {
     console.error("OpenAI response generation failed", error);
     return c.json({ error: "Unable to generate story response" }, 502);

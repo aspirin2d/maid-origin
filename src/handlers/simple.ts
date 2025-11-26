@@ -33,11 +33,11 @@ const querySchema = z.object({
     .describe("User's input"),
 });
 
-type SimpleQuery = z.output<typeof querySchema>;
-type SimpleResponse = z.output<typeof responseSchema>;
+type SimpleQuery = z.infer<typeof querySchema>;
+type SimpleResponse = z.infer<typeof responseSchema>;
 type SimpleMessage =
-  | QueryMessage<z.output<typeof querySchema>>
-  | ResponseMessage<z.output<typeof responseSchema>>;
+  | QueryMessage<z.infer<typeof querySchema>>
+  | ResponseMessage<z.infer<typeof responseSchema>>;
 
 const MAX_MEMORY_RESULTS = 5;
 const MIN_MEMORY_SIMILARITY = 0;
@@ -85,10 +85,7 @@ function formatMemories(memories: MemorySearchResult[]): string {
     .join("\n");
 }
 
-export const simpleHandler: StoryHandler<
-  typeof querySchema,
-  typeof responseSchema
-> = {
+export const simpleHandler: StoryHandler<SimpleQuery, SimpleResponse> = {
   name: "simple",
   description: "Simple story handler.",
   querySchema,

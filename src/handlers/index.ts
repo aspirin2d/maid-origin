@@ -1,9 +1,8 @@
-import z from "zod";
-
 import type { ZodType } from "zod";
 import type { User } from "../auth.ts";
 import { imHandler } from "./im/index.ts";
 import { simpleHandler } from "./simple.ts";
+import { liveHandler } from "./live/index.ts";
 
 export type QueryMessage<TQuery> = {
   contentType: "query";
@@ -15,7 +14,6 @@ export type ResponseMessage<TResponse> = {
   content: TResponse;
 };
 
-// Message shape persisted for any handler: either the user's query or the model's response.
 export type MessageInsert<TQuery, TResponse> =
   | QueryMessage<TQuery>
   | ResponseMessage<TResponse>;
@@ -26,43 +24,46 @@ export interface StoryHandlerContext<TInput> {
   input: TInput;
 }
 
-export interface StoryHandler<
-  TQuerySchema extends ZodType,
-  TResponseSchema extends ZodType,
-> {
+export interface StoryHandler<TQuery, TResponse> {
   name: string;
   description: string;
-  querySchema: TQuerySchema;
-  responseSchema: TResponseSchema;
-  beforeGenerate(
-    context: StoryHandlerContext<z.output<TQuerySchema>>,
-  ): Promise<{
+  querySchema: ZodType<TQuery>;
+  responseSchema: ZodType<TResponse>;
+
+  beforeGenerate(context: StoryHandlerContext<TQuery>): Promise<{
     prompt: string;
-    responseSchema: TResponseSchema;
-    queryMessage: QueryMessage<z.output<TQuerySchema>>;
+    queryMessage: QueryMessage<TQuery>;
+    // you can still allow a different response schema at runtime if needed:
+    responseSchema?: ZodType<TResponse>;
   }>;
+
   afterGenerate(
-    context: StoryHandlerContext<z.output<TQuerySchema>>,
-    response: z.output<TResponseSchema>,
-  ): Promise<ResponseMessage<z.output<TResponseSchema>>>;
+    context: StoryHandlerContext<TQuery>,
+    response: TResponse,
+  ): Promise<ResponseMessage<TResponse>>;
+
   messageToString(
-    message:
-      | ResponseMessage<z.output<TResponseSchema>>
-      | QueryMessage<z.output<TQuerySchema>>,
+    message: ResponseMessage<TResponse> | QueryMessage<TQuery>,
   ): string;
 }
 
-const registeredStoryHandlers = [simpleHandler, imHandler] as const;
-export type RegisteredStoryHandler = (typeof registeredStoryHandlers)[number];
+const handlerRegistry = new Map<string, StoryHandler<any, any>>();
 
-export function getStoryHandlerByName<
-  TName extends RegisteredStoryHandler["name"],
->(name: TName): Extract<RegisteredStoryHandler, { name: TName }> {
-  const handler = registeredStoryHandlers.find(
-    (candidate) => candidate.name === name,
-  );
+export function registerStoryHandler(handler: StoryHandler<any, any>) {
+  if (handlerRegistry.has(handler.name)) {
+    throw new Error(`Duplicate story handler name: ${handler.name}`);
+  }
+  handlerRegistry.set(handler.name, handler);
+}
+
+export function getStoryHandlerByName(name: string): StoryHandler<any, any> {
+  const handler = handlerRegistry.get(name);
   if (!handler) {
     throw new Error(`Unknown story handler: ${name}`);
   }
-  return handler as Extract<RegisteredStoryHandler, { name: TName }>;
+  return handler;
 }
+
+registerStoryHandler(simpleHandler);
+registerStoryHandler(imHandler);
+registerStoryHandler(liveHandler);

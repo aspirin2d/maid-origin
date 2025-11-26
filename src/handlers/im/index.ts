@@ -155,10 +155,7 @@ function parseStoredMessage(record: {
   return null;
 }
 
-export const imHandler: StoryHandler<
-  typeof querySchema,
-  typeof responseSchema
-> = {
+export const imHandler: StoryHandler<IMQuery, IMResponse> = {
   name: "im",
   description:
     "Ria Virtual Idol IM Handler - One-on-one chat with state management, scheduling, and affection system",

@@ -41,7 +41,9 @@ export const message = pgTable(
     storyId: integer("story_id")
       .notNull()
       .references(() => story.id, { onDelete: "cascade" }),
-    contentType: text("content-type").notNull(),
+    contentType: text("content-type", {
+      enum: ["query", "response"],
+    }).notNull(),
     content: jsonb("content").notNull(),
     extracted: boolean("extracted").notNull().default(false),
     ...Timestamp,
