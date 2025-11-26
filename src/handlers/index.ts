@@ -2,12 +2,22 @@ import z from "zod";
 
 import type { ZodType } from "zod";
 import type { User } from "../auth.ts";
-import { liveHandler } from "./live/index.ts";
 import { simpleHandler } from "./simple.ts";
 
-export type MessageInsert<TInput, TResponse> =
-  | { contentType: "input"; content: TInput }
-  | { contentType: "response"; content: TResponse };
+export type QueryMessage<TQuery> = {
+  contentType: "query";
+  content: TQuery;
+};
+
+export type ResponseMessage<TResponse> = {
+  contentType: "response";
+  content: TResponse;
+};
+
+// Message shape persisted for any handler: either the user's query or the model's response.
+export type MessageInsert<TQuery, TResponse> =
+  | QueryMessage<TQuery>
+  | ResponseMessage<TResponse>;
 
 export interface StoryHandlerContext<TInput> {
   storyId: string;
@@ -16,35 +26,32 @@ export interface StoryHandlerContext<TInput> {
 }
 
 export interface StoryHandler<
-  TInputSchema extends ZodType,
+  TQuerySchema extends ZodType,
   TResponseSchema extends ZodType,
 > {
   name: string;
   description: string;
-  inputSchema: TInputSchema;
+  querySchema: TQuerySchema;
   responseSchema: TResponseSchema;
   beforeGenerate(
-    context: StoryHandlerContext<z.output<TInputSchema>>,
+    context: StoryHandlerContext<z.output<TQuerySchema>>,
   ): Promise<{
     prompt: string;
     responseSchema: TResponseSchema;
-    insertMessages: MessageInsert<
-      z.output<TInputSchema>,
-      z.output<TResponseSchema>
-    >[];
+    queryMessage: QueryMessage<z.output<TQuerySchema>>;
   }>;
   afterGenerate(
-    context: StoryHandlerContext<z.output<TInputSchema>>,
+    context: StoryHandlerContext<z.output<TQuerySchema>>,
     response: z.output<TResponseSchema>,
-  ): Promise<
-    MessageInsert<z.output<TInputSchema>, z.output<TResponseSchema>>[]
-  >;
+  ): Promise<ResponseMessage<z.output<TResponseSchema>>>;
   messageToString(
-    message: MessageInsert<z.output<TInputSchema>, z.output<TResponseSchema>>,
+    message:
+      | ResponseMessage<z.output<TResponseSchema>>
+      | QueryMessage<z.output<TQuerySchema>>,
   ): string;
 }
 
-const registeredStoryHandlers = [simpleHandler, liveHandler] as const;
+const registeredStoryHandlers = [simpleHandler] as const;
 export type RegisteredStoryHandler = (typeof registeredStoryHandlers)[number];
 
 export function getStoryHandlerByName<

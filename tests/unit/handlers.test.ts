@@ -5,7 +5,6 @@ import {
   type MessageInsert,
   type StoryHandlerContext,
 } from "../../src/handlers/index.ts";
-import { liveHandler } from "../../src/handlers/live/index.ts";
 import { simpleHandler } from "../../src/handlers/simple.ts";
 
 describe("getStoryHandlerByName", () => {
@@ -13,12 +12,6 @@ describe("getStoryHandlerByName", () => {
     const handler = getStoryHandlerByName("simple");
     expect(handler).toBe(simpleHandler);
     expect(handler.name).toBe("simple");
-  });
-
-  it("returns the live handler when requested", () => {
-    const handler = getStoryHandlerByName("live");
-    expect(handler).toBe(liveHandler);
-    expect(handler.name).toBe("live");
   });
 
   it("throws for unknown handler names to prevent silently using the wrong interface", () => {
@@ -37,7 +30,7 @@ describe("MessageInsert type contract", () => {
 
   it("formats user input messages consistently", () => {
     const message: MessageInsert<Input, Response> = {
-      contentType: "input",
+      contentType: "query",
       content: { question: "How are you?" },
     };
     expect(messageToString(message)).toBe("User: How are you?");

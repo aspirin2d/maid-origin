@@ -221,7 +221,7 @@ function formatMessagesForFactExtraction(messages: Messages): string {
 }
 
 type HandlerInput<THandler extends RegisteredStoryHandler> = z.output<
-  THandler["inputSchema"]
+  THandler["querySchema"]
 >;
 type HandlerResponse<THandler extends RegisteredStoryHandler> = z.output<
   THandler["responseSchema"]
@@ -231,11 +231,11 @@ function toHandlerMessage<THandler extends RegisteredStoryHandler>(
   handler: THandler,
   msg: Message,
 ): MessageInsert<HandlerInput<THandler>, HandlerResponse<THandler>> | null {
-  if (msg.contentType === "input") {
-    const parsedInput = handler.inputSchema.safeParse(msg.content);
+  if (msg.contentType === "query") {
+    const parsedInput = handler.querySchema.safeParse(msg.content);
     if (parsedInput.success) {
       return {
-        contentType: "input",
+        contentType: "query",
         content: parsedInput.data as HandlerInput<THandler>,
       };
     }

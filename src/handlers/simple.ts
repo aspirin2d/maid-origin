@@ -9,7 +9,8 @@ import {
 } from "../memory/search.ts";
 import { Embed } from "../openai.ts";
 import type {
-  MessageInsert,
+  QueryMessage,
+  ResponseMessage,
   StoryHandler,
   StoryHandlerContext,
 } from "./index.ts";
@@ -18,23 +19,25 @@ const storyIdSchema = z.coerce.number().int().positive({
   message: "Story id must be a positive integer",
 });
 
-const outputSchema = z.object({
+const responseSchema = z.object({
   answer: z
     .string()
     .min(1, "Assistant answer is required")
     .describe("Assistant answer to user's question"),
 });
 
-const inputSchema = z.object({
+const querySchema = z.object({
   question: z
     .string()
     .min(1, "User input is required")
     .describe("User's input"),
 });
 
-type SimpleInput = z.output<typeof inputSchema>;
-type SimpleResponse = z.output<typeof outputSchema>;
-type SimpleMessage = MessageInsert<SimpleInput, SimpleResponse>;
+type SimpleQuery = z.output<typeof querySchema>;
+type SimpleResponse = z.output<typeof responseSchema>;
+type SimpleMessage =
+  | QueryMessage<z.output<typeof querySchema>>
+  | ResponseMessage<z.output<typeof responseSchema>>;
 
 const MAX_MEMORY_RESULTS = 5;
 const MIN_MEMORY_SIMILARITY = 0;
@@ -83,14 +86,14 @@ function formatMemories(memories: MemorySearchResult[]): string {
 }
 
 export const simpleHandler: StoryHandler<
-  typeof inputSchema,
-  typeof outputSchema
+  typeof querySchema,
+  typeof responseSchema
 > = {
   name: "simple",
   description: "Simple story handler.",
-  inputSchema,
-  responseSchema: outputSchema,
-  async beforeGenerate(context: StoryHandlerContext<SimpleInput>) {
+  querySchema,
+  responseSchema,
+  async beforeGenerate(context: StoryHandlerContext<SimpleQuery>) {
     const storyId = storyIdSchema.parse(context.storyId);
     const historyMessages = (
       await db
@@ -101,7 +104,7 @@ export const simpleHandler: StoryHandler<
         .limit(20)
     ).reverse();
 
-    const parsed = inputSchema.parse(context.input);
+    const parsed = querySchema.parse(context.input);
     const relevantMemoriesSection = await buildRelevantMemoriesSection(
       context.user.id,
       parsed.question,
@@ -125,19 +128,19 @@ export const simpleHandler: StoryHandler<
     ];
     const prompt = promptSections.join("\n");
 
-    const inputMessage: SimpleMessage = {
-      contentType: "input",
+    const queryMessage: SimpleMessage = {
+      contentType: "query",
       content: parsed,
     };
 
     return {
       prompt,
-      responseSchema: outputSchema,
-      insertMessages: [inputMessage],
+      responseSchema,
+      queryMessage,
     };
   },
   async afterGenerate(
-    context: StoryHandlerContext<SimpleInput>,
+    context: StoryHandlerContext<SimpleQuery>,
     response: SimpleResponse,
   ) {
     storyIdSchema.parse(context.storyId);
@@ -145,10 +148,10 @@ export const simpleHandler: StoryHandler<
       contentType: "response",
       content: response,
     };
-    return [responseMessage];
+    return responseMessage;
   },
   messageToString(message: SimpleMessage) {
-    if (message.contentType === "input") {
+    if (message.contentType === "query") {
       return `User: ${message.content.question}`;
     }
     if (message.contentType === "response") {
@@ -163,16 +166,16 @@ function parseStoredMessage(record: {
   contentType: string;
   content: unknown;
 }): SimpleMessage | null {
-  if (record.contentType === "input") {
-    const parsed = inputSchema.safeParse(record.content);
+  if (record.contentType === "query") {
+    const parsed = querySchema.safeParse(record.content);
     if (parsed.success) {
-      return { contentType: "input", content: parsed.data };
+      return { contentType: "query", content: parsed.data };
     }
     return null;
   }
 
   if (record.contentType === "response") {
-    const parsed = outputSchema.safeParse(record.content);
+    const parsed = responseSchema.safeParse(record.content);
     if (parsed.success) {
       return { contentType: "response", content: parsed.data };
     }

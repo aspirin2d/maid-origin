@@ -311,7 +311,7 @@ storyRoute.post("/generate-story", async (c) => {
 
   const handler = getStoryHandlerByName(record.handler);
 
-  const handlerInputResult = handler.inputSchema.safeParse(parsed.data.input);
+  const handlerInputResult = handler.querySchema.safeParse(parsed.data.input);
   if (!handlerInputResult.success) {
     return c.json({ error: z.treeifyError(handlerInputResult.error) }, 400);
   }
@@ -343,9 +343,9 @@ storyRoute.post("/generate-story", async (c) => {
     return c.json({ error: "Unable to generate story response" }, 502);
   }
 
-  let afterGenerateMessages;
+  let responseMessage;
   try {
-    afterGenerateMessages = await handler.afterGenerate(
+    responseMessage = await handler.afterGenerate(
       handlerContext,
       modelResponse,
     );
@@ -354,10 +354,7 @@ storyRoute.post("/generate-story", async (c) => {
     return c.json({ error: "Unable to finalize story generation" }, 500);
   }
 
-  const messagesToInsert = [
-    ...beforeGenerateResult.insertMessages,
-    ...afterGenerateMessages,
-  ];
+  const messagesToInsert = [beforeGenerateResult.queryMessage, responseMessage];
 
   if (messagesToInsert.length > 0) {
     try {
