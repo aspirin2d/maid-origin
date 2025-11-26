@@ -1,5 +1,5 @@
 // @ts-nocheck
-import type { StoryContext, HandlerConfig } from "../index.ts";
+import type { StoryContext, HandlerConfig } from "./types.ts";
 import {
   getCharacterBasicSettings,
   getStreamProgramSettings,

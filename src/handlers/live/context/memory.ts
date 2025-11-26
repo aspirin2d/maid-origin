@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { Embed } from "../../../openai.ts";
 import { searchSimilarMemories } from "../../../memory/search.ts";
-import type { StoryContext, HandlerConfig } from "../../index.ts";
+import type { StoryContext, HandlerConfig } from "../types.ts";
 import { dayjs } from "./time.ts";
 
 /**

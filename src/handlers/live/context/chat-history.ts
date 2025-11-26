@@ -2,7 +2,7 @@
 import { desc, eq } from "drizzle-orm";
 import { db } from "../../../db/index.ts";
 import { message } from "../../../db/schema.ts";
-import type { StoryContext } from "../../index.ts";
+import type { StoryContext } from "../types.ts";
 import { dayjs } from "./time.ts";
 
 /**
