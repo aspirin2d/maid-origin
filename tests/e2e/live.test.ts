@@ -10,6 +10,39 @@ type LiveResponsePayload = {
   };
 };
 
+async function createLiveStory(jsonHeaders: Record<string, string>) {
+  const baseUrl = getApiBaseUrl();
+  const createResponse = await fetch(`${baseUrl}/api/create-story`, {
+    method: "POST",
+    headers: jsonHeaders,
+    body: JSON.stringify({
+      name: `E2E Live Story ${Date.now()}`,
+      handler: "live",
+    }),
+  });
+
+  const created = await expectJsonResponse<{ story?: { id: number } }>(
+    createResponse,
+    201,
+  );
+
+  expect(created.story).toBeTruthy();
+  return created.story!.id;
+}
+
+async function deleteStory(
+  storyId: number | undefined,
+  jsonHeaders: Record<string, string>,
+) {
+  if (!storyId) return;
+  const baseUrl = getApiBaseUrl();
+  await fetch(`${baseUrl}/api/delete-story`, {
+    method: "POST",
+    headers: jsonHeaders,
+    body: JSON.stringify({ id: storyId }),
+  }).catch(() => undefined);
+}
+
 async function expectJsonResponse<T>(
   response: Response,
   expectedStatus = 200,
@@ -37,23 +70,7 @@ test(
       "Content-Type": "application/json",
     } as const;
 
-    const createPayload = {
-      name: `E2E Live Story ${Date.now()}`,
-      handler: "live",
-    };
-
-    const createResponse = await fetch(`${baseUrl}/api/create-story`, {
-      method: "POST",
-      headers: jsonHeaders,
-      body: JSON.stringify(createPayload),
-    });
-    const created = await expectJsonResponse<{ story?: { id: number } }>(
-      createResponse,
-      201,
-    );
-
-    expect(created.story).toBeTruthy();
-    const storyId = created.story!.id;
+    const storyId = await createLiveStory(jsonHeaders);
 
     try {
       const generateResponse = await fetch(`${baseUrl}/api/generate-story`, {
@@ -82,11 +99,7 @@ test(
       expect(firstClip?.face).toBeTruthy();
       expect(firstClip?.speech).toBeTruthy();
     } finally {
-      await fetch(`${baseUrl}/api/delete-story`, {
-        method: "POST",
-        headers: jsonHeaders,
-        body: JSON.stringify({ id: storyId }),
-      }).catch(() => undefined);
+      await deleteStory(storyId, jsonHeaders);
     }
   },
   60_000,
@@ -150,4 +163,133 @@ test(
     }
   },
   30_000,
+);
+
+test(
+  "live handler responds to bullet_chat events",
+  async () => {
+    const token = await loginAndGetBearerToken();
+    const baseUrl = getApiBaseUrl();
+    const jsonHeaders = {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    } as const;
+
+    const storyId = await createLiveStory(jsonHeaders);
+
+    try {
+      const response = await fetch(`${baseUrl}/api/generate-story`, {
+        method: "POST",
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          storyId,
+          input: {
+            type: "bullet_chat",
+            data: {
+              message: "好可爱！",
+              username: "粉丝A",
+              position: "scroll",
+            },
+          },
+        }),
+      });
+
+      const payload =
+        await expectJsonResponse<LiveResponsePayload>(response, 200);
+      expect(payload.handler).toBe("live");
+      expect(payload.response?.clips?.length).toBeGreaterThan(0);
+      expect(payload.response?.clips?.[0]?.speech).toBeTruthy();
+    } finally {
+      await deleteStory(storyId, jsonHeaders);
+    }
+  },
+  60_000,
+);
+
+test(
+  "live handler responds to gift_event with gratitude",
+  async () => {
+    const token = await loginAndGetBearerToken();
+    const baseUrl = getApiBaseUrl();
+    const jsonHeaders = {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    } as const;
+
+    const storyId = await createLiveStory(jsonHeaders);
+
+    try {
+      const response = await fetch(`${baseUrl}/api/generate-story`, {
+        method: "POST",
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          storyId,
+          input: {
+            type: "gift_event",
+            data: {
+              username: "大佬",
+              giftName: "超大火箭",
+              giftCount: 1,
+              giftValue: 999,
+              message: "继续加油！",
+            },
+          },
+        }),
+      });
+
+      const payload =
+        await expectJsonResponse<LiveResponsePayload>(response, 200);
+      const firstClip = payload.response?.clips?.[0];
+      expect(firstClip?.body).toBeTruthy();
+      expect(firstClip?.face).toBeTruthy();
+      expect(firstClip?.speech).toBeTruthy();
+    } finally {
+      await deleteStory(storyId, jsonHeaders);
+    }
+  },
+  60_000,
+);
+
+test(
+  "live handler responds to program_event start",
+  async () => {
+    const token = await loginAndGetBearerToken();
+    const baseUrl = getApiBaseUrl();
+    const jsonHeaders = {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    } as const;
+
+    const storyId = await createLiveStory(jsonHeaders);
+
+    try {
+      const response = await fetch(`${baseUrl}/api/generate-story`, {
+        method: "POST",
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          storyId,
+          input: {
+            type: "program_event",
+            data: {
+              action: "start",
+              programName: "深夜聊天",
+              programType: "chatting",
+              metadata: { topic: "校园生活" },
+            },
+          },
+        }),
+      });
+
+      const payload =
+        await expectJsonResponse<LiveResponsePayload>(response, 200);
+      expect(payload.response?.clips?.length).toBeGreaterThan(0);
+      expect(payload.response?.clips?.[0]?.speech).toBeTruthy();
+    } finally {
+      await deleteStory(storyId, jsonHeaders);
+    }
+  },
+  60_000,
 );
