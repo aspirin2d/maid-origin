@@ -2,6 +2,7 @@ import z from "zod";
 
 import type { ZodType } from "zod";
 import type { User } from "../auth.ts";
+import { imHandler } from "./im/index.ts";
 import { simpleHandler } from "./simple.ts";
 
 export type QueryMessage<TQuery> = {
@@ -51,7 +52,7 @@ export interface StoryHandler<
   ): string;
 }
 
-const registeredStoryHandlers = [simpleHandler] as const;
+const registeredStoryHandlers = [simpleHandler, imHandler] as const;
 export type RegisteredStoryHandler = (typeof registeredStoryHandlers)[number];
 
 export function getStoryHandlerByName<
