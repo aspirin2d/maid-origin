@@ -19,7 +19,6 @@ import {
 } from "./pagination.ts";
 import { addExtractionJob } from "./queue/index.ts";
 
-type StoryInsert = typeof story.$inferInsert;
 const storyRoute = new Hono<AppEnv>();
 
 // Only validate fields that should come from the request body; userId comes from auth context.
