@@ -67,8 +67,30 @@ Handler input hints:
   Body: `{ "id": number }`  
   Deletes one memory owned by the caller.
 
+- `POST /api/update-memory`  
+  Body: `{ "id": number, "content"?: string, "prevContent"?: string, "category"?: string, "importance"?: number (0-1), "confidence"?: number (0-1), "action"?: "ADD"|"UPDATE"|"DELETE" }`  
+  Updates selected fields on a memory owned by the caller.
+
 - `POST /api/prune-memories`  
   Deletes all of the caller’s memories. **Disabled in production**.
+
+### Messages
+- `GET /api/list-messages?storyId&limit&offset&sortBy=id|storyId|contentType|extracted|createdAt|updatedAt&sortDirection=asc|desc`  
+  Returns paginated, sorted messages belonging to the caller. Optional `storyId` narrows results to one story.
+
+- `GET /api/get-message?id=<messageId>`  
+  Fetch a single message owned by the caller.
+
+- `POST /api/update-message`  
+  Body: `{ "id": number, "contentType"?: "query" | "response", "content"?: any, "extracted"?: boolean }`  
+  Updates selected fields on a message.
+
+- `POST /api/delete-message`  
+  Body: `{ "id": number }`  
+  Deletes one message owned by the caller.
+
+- `POST /api/prune-message`  
+  Deletes all messages across the caller’s stories. **Disabled in production**.
 
 ## Memory Extraction Flow
 1) Every `generate-story` call stores a query+response message pair.  

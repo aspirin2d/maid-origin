@@ -6,6 +6,7 @@ import { logger } from "hono/logger";
 import { authMiddleware, type AppEnv } from "./auth.ts";
 import { env } from "./env.ts";
 import { memoryRoute } from "./memory/index.ts";
+import { messageRoute } from "./message.ts";
 import { storyRoute } from "./story.ts";
 
 const app = new Hono<AppEnv>();
@@ -42,6 +43,7 @@ app.use("/api/*", authMiddleware);
 // Story routes
 app.route("/api", storyRoute);
 app.route("/api", memoryRoute);
+app.route("/api", messageRoute);
 
 app.get("/api/user", (c) => {
   const user = c.get("user");

@@ -1,5 +1,6 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import { createInsertSchema, createUpdateSchema } from "drizzle-zod";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 
@@ -11,41 +12,29 @@ import {
   type StoryHandlerContext,
 } from "./handlers/index.ts";
 import { Response } from "./openai.ts";
+import {
+  applyPagination,
+  normalizeQueryValue,
+  paginationParamsSchema,
+} from "./pagination.ts";
 import { addExtractionJob } from "./queue/index.ts";
 
 type StoryInsert = typeof story.$inferInsert;
 const storyRoute = new Hono<AppEnv>();
 
-const createStorySchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, "Story name is required")
-    .max(256, "Story name must be at most 256 characters"),
-  handler: z
-    .string()
-    .trim()
-    .min(1, "Handler is required")
-    .max(128, "Handler must be at most 128 characters"),
+// Only validate fields that should come from the request body; userId comes from auth context.
+const createStorySchema = createInsertSchema(story).pick({
+  name: true,
+  handler: true,
 });
-
-const updateStorySchema = z
-  .object({
-    name: createStorySchema.shape.name.optional(),
-    handler: createStorySchema.shape.handler.optional(),
-  })
-  .refine((data) => data.name !== undefined || data.handler !== undefined, {
-    message: "Provide at least one field to update",
-  });
+const updateStorySchema = z.object({
+  id: z.int(),
+  data: createUpdateSchema(story),
+});
 
 const storyIdSchema = z.coerce.number().int().positive({
   message: "Story id must be a positive integer",
 });
-
-const updateStoryRequestSchema = updateStorySchema.safeExtend({
-  id: storyIdSchema,
-});
-
 const deleteStorySchema = z.object({
   id: storyIdSchema,
 });
@@ -73,36 +62,13 @@ const sortableColumns = {
   updatedAt: story.updatedAt,
 } satisfies Record<StorySortField, AnyPgColumn>;
 
-const positiveIntegerParam = z.coerce
-  .number()
-  .int({ message: "Must be an integer" })
-  .gt(0, { message: "Must be greater than 0" });
-
-const nonNegativeIntegerParam = z.coerce
-  .number()
-  .int({ message: "Must be an integer" })
-  .min(0, { message: "Must be non-negative" });
-
-const listStoriesQuerySchema = z.object({
-  limit: positiveIntegerParam.optional().nullish(),
-  offset: nonNegativeIntegerParam.optional().nullish(),
+const listStoriesQuerySchema = paginationParamsSchema.extend({
   sortBy: z.enum(sortableStoryFields).optional().nullish(),
   sortDirection: z.enum(["asc", "desc"]).optional().nullish(),
 });
 
 const missingUserResponse = (c: Context<AppEnv>) =>
   c.json({ error: "User missing from request context" }, 500);
-
-function normalizeQueryValue(value: string | undefined) {
-  if (value === undefined) {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.toLowerCase() === "null") {
-    return undefined;
-  }
-  return trimmed;
-}
 
 storyRoute.post("/create-story", async (c) => {
   const user = c.get("user");
@@ -206,23 +172,23 @@ storyRoute.post("/update-story", async (c) => {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
 
-  const parsed = updateStoryRequestSchema.safeParse(payload);
+  const parsed = updateStorySchema.safeParse(payload);
   if (!parsed.success) {
     return c.json({ error: z.treeifyError(parsed.error) }, 400);
   }
 
-  const updateData: Partial<StoryInsert> = {};
-  if (parsed.data.name !== undefined) {
-    updateData.name = parsed.data.name;
-  }
-  if (parsed.data.handler !== undefined) {
-    updateData.handler = parsed.data.handler;
-  }
-  updateData.updatedAt = new Date();
+  // Prevent changing ownership or immutable fields via payload
+  const updateData = { ...parsed.data.data };
+  delete (updateData as any).userId;
+  delete (updateData as any).id;
+  delete (updateData as any).createdAt;
 
   const updated = await db
     .update(story)
-    .set(updateData)
+    .set({
+      ...updateData,
+      updatedAt: new Date(),
+    })
     .where(and(eq(story.id, parsed.data.id), eq(story.userId, user.id)))
     .returning();
 
@@ -266,13 +232,7 @@ storyRoute.get("/list-stories", async (c) => {
     )
     .$dynamic();
 
-  if (parsed.data.limit) {
-    storiesQuery.limit(parsed.data.limit);
-  }
-
-  if (parsed.data.offset) {
-    storiesQuery.offset(parsed.data.offset);
-  }
+  applyPagination(storiesQuery, parsed.data);
 
   const stories = await storiesQuery;
   return c.json({ stories });

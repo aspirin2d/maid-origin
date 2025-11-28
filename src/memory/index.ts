@@ -1,5 +1,6 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import { createInsertSchema, createUpdateSchema } from "drizzle-zod";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -7,6 +8,12 @@ import type { AppEnv } from "../auth.ts";
 import { db } from "../db/index.ts";
 import { memory } from "../db/schema.ts";
 import { env } from "../env.ts";
+import { Embed } from "../openai.ts";
+import {
+  applyPagination,
+  normalizeQueryValue,
+  paginationParamsSchema,
+} from "../pagination.ts";
 
 const sortableMemoryFields = [
   "id",
@@ -32,19 +39,7 @@ const sortableMemoryColumns = {
   updatedAt: memory.updatedAt,
 } satisfies Record<MemorySortField, AnyPgColumn>;
 
-const positiveIntegerParam = z.coerce
-  .number()
-  .int({ message: "Must be an integer" })
-  .gt(0, { message: "Must be greater than 0" });
-
-const nonNegativeIntegerParam = z.coerce
-  .number()
-  .int({ message: "Must be an integer" })
-  .min(0, { message: "Must be non-negative" });
-
-const listMemoriesQuerySchema = z.object({
-  limit: positiveIntegerParam.optional().nullish(),
-  offset: nonNegativeIntegerParam.optional().nullish(),
+const listMemoriesQuerySchema = paginationParamsSchema.extend({
   sortBy: z.enum(sortableMemoryFields).optional().nullish(),
   sortDirection: z.enum(["asc", "desc"]).optional().nullish(),
 });
@@ -57,16 +52,12 @@ const deleteMemorySchema = z.object({
   id: memoryIdSchema,
 });
 
-function normalizeQueryValue(value: string | undefined) {
-  if (value === undefined) {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.toLowerCase() === "null") {
-    return undefined;
-  }
-  return trimmed;
-}
+const memoryUpdateSchema = z.object({
+  id: z.int(),
+  data: createUpdateSchema(memory),
+});
+
+const createMemorySchema = createInsertSchema(memory);
 
 export const memoryRoute = new Hono<AppEnv>();
 
@@ -100,13 +91,7 @@ memoryRoute.get("/list-memories", async (c) => {
       )
       .$dynamic();
 
-    if (parsed.data.limit) {
-      query.limit(parsed.data.limit);
-    }
-
-    if (parsed.data.offset) {
-      query.offset(parsed.data.offset);
-    }
+    applyPagination(query, parsed.data);
 
     const memories = await query;
     return c.json({ memories });
@@ -114,6 +99,47 @@ memoryRoute.get("/list-memories", async (c) => {
     console.error("Failed to fetch memories", error);
     return c.json({ error: "Failed to fetch memories" }, 500);
   }
+});
+
+memoryRoute.post("/create-memory", async (c) => {
+  const user = c.get("user")!;
+
+  let payload: unknown;
+  try {
+    payload = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const parsed = createMemorySchema.safeParse(payload);
+  if (!parsed.success) {
+    return c.json({ error: z.treeifyError(parsed.error) }, 400);
+  }
+
+  const { content, category, importance, confidence, action } = parsed.data;
+
+  let embedding: number[] | undefined;
+  try {
+    embedding = await Embed(content);
+  } catch (error) {
+    console.error("Failed to embed memory content", error);
+    return c.json({ error: "Failed to generate embedding" }, 500);
+  }
+
+  const [newMemory] = await db
+    .insert(memory)
+    .values({
+      userId: user.id,
+      content,
+      category,
+      importance,
+      confidence,
+      action,
+      embedding,
+    })
+    .returning();
+
+  return c.json({ memory: newMemory }, 201);
 });
 
 memoryRoute.post("/delete-memory", async (c) => {
@@ -145,6 +171,55 @@ memoryRoute.post("/delete-memory", async (c) => {
   }
 
   return c.json({ memory: record });
+});
+
+memoryRoute.post("/update-memory", async (c) => {
+  const user = c.get("user")!;
+
+  let payload: unknown;
+  try {
+    payload = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const parsed = memoryUpdateSchema.safeParse(payload);
+  if (!parsed.success) {
+    return c.json({ error: z.treeifyError(parsed.error) }, 400);
+  }
+
+  // Prevent changing ownership or immutable fields via payload
+  const updateData = { ...parsed.data.data };
+  delete (updateData as any).userId;
+  delete (updateData as any).id;
+  delete (updateData as any).createdAt;
+
+  const existing = await db
+    .select()
+    .from(memory)
+    .where(and(eq(memory.id, parsed.data.id), eq(memory.userId, user.id)))
+    .limit(1);
+
+  const record = existing[0];
+  if (!record) {
+    return c.json({ error: "Memory not found" }, 404);
+  }
+
+  const updated = await db
+    .update(memory)
+    .set({
+      ...updateData,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(memory.id, parsed.data.id), eq(memory.userId, user.id)))
+    .returning();
+
+  const updatedRecord = updated[0];
+  if (!updatedRecord) {
+    return c.json({ error: "Memory not found" }, 404);
+  }
+
+  return c.json({ memory: updatedRecord });
 });
 
 memoryRoute.post("/prune-memories", async (c) => {

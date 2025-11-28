@@ -63,7 +63,7 @@ export const memory = pgTable(
   {
     id: serial("id").primaryKey(),
     userId: text("user_id").notNull(),
-    content: text("content"),
+    content: text("content").notNull(),
     prevContent: text("previous_content"),
 
     // Memory metadata fields
