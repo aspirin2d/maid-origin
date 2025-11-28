@@ -40,8 +40,8 @@ Base URL: `/api`. All responses are JSON.
   Fetch a single story owned by the caller.
 
 - `POST /api/update-story`  
-  Body: `{ "id": number, "name"?: string, "handler"?: string }`  
-  Updates story metadata.
+  Body: `{ "id": number, "data": { "name"?: string, "handler"?: string } }`  
+  Updates story metadata. `userId`, `id`, and `createdAt` in `data` are ignored for safety.
 
 - `POST /api/delete-story`  
   Body: `{ "id": number }`  
@@ -68,8 +68,8 @@ Handler input hints:
   Deletes one memory owned by the caller.
 
 - `POST /api/update-memory`  
-  Body: `{ "id": number, "content"?: string, "prevContent"?: string, "category"?: string, "importance"?: number (0-1), "confidence"?: number (0-1), "action"?: "ADD"|"UPDATE"|"DELETE" }`  
-  Updates selected fields on a memory owned by the caller.
+  Body: `{ "id": number, "data": { "content"?: string, "prevContent"?: string, "category"?: string, "importance"?: number (0-1), "confidence"?: number (0-1), "action"?: "ADD"|"UPDATE"|"DELETE" } }`  
+  Updates selected fields on a memory owned by the caller. `userId`, `id`, and `createdAt` in `data` are ignored for safety.
 
 - `POST /api/prune-memories`  
   Deletes all of the caller’s memories. **Disabled in production**.
