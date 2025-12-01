@@ -1,7 +1,6 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { Hono, type Context } from "hono";
-import { createUpdateSchema } from "drizzle-zod";
 import { z } from "zod";
 
 import type { AppEnv } from "./auth.ts";
@@ -45,10 +44,6 @@ const messageIdSchema = z.coerce.number().int().positive({
   message: "Message id must be a positive integer",
 });
 
-const messageUpdateSchema = createUpdateSchema(message).safeExtend({
-  id: z.int(),
-});
-
 const deleteMessageSchema = z.object({
   id: messageIdSchema,
 });
@@ -85,7 +80,15 @@ messageRoute.get("/list-messages", async (c) => {
     : eq(story.userId, user.id);
 
   const query = db
-    .select()
+    .select({
+      id: message.id,
+      storyId: message.storyId,
+      contentType: message.contentType,
+      content: message.content,
+      extracted: message.extracted,
+      createdAt: message.createdAt,
+      updatedAt: message.updatedAt,
+    })
     .from(message)
     .innerJoin(story, eq(message.storyId, story.id))
     .where(whereCondition)
@@ -126,68 +129,6 @@ messageRoute.get("/get-message", async (c) => {
   }
 
   return c.json({ message: record });
-});
-
-messageRoute.post("/update-message", async (c) => {
-  const user = c.get("user");
-  if (!user) {
-    return missingUserResponse(c);
-  }
-
-  let payload: unknown;
-  try {
-    payload = await c.req.json();
-  } catch {
-    return c.json({ error: "Invalid JSON body" }, 400);
-  }
-
-  const parsed = messageUpdateSchema.safeParse(payload);
-  if (!parsed.success) {
-    return c.json({ error: z.treeifyError(parsed.error) }, 400);
-  }
-
-  const existing = await db
-    .select({ id: message.id, storyId: message.storyId })
-    .from(message)
-    .innerJoin(story, eq(message.storyId, story.id))
-    .where(and(eq(message.id, parsed.data.id), eq(story.userId, user.id)))
-    .limit(1);
-
-  const record = existing[0];
-  if (!record) {
-    return c.json({ error: "Message not found" }, 404);
-  }
-
-  const updateData: Partial<typeof message.$inferInsert> = {
-    updatedAt: new Date(),
-  };
-
-  if (parsed.data.contentType !== undefined) {
-    updateData.contentType = parsed.data.contentType;
-  }
-
-  if (parsed.data.content !== undefined) {
-    updateData.content = parsed.data.content as unknown;
-  }
-
-  if (parsed.data.extracted !== undefined) {
-    updateData.extracted = parsed.data.extracted;
-  }
-
-  const updated = await db
-    .update(message)
-    .set(updateData)
-    .where(
-      and(eq(message.id, parsed.data.id), eq(message.storyId, record.storyId)),
-    )
-    .returning();
-
-  const updatedRecord = updated[0];
-  if (!updatedRecord) {
-    return c.json({ error: "Message not found" }, 404);
-  }
-
-  return c.json({ message: updatedRecord });
 });
 
 messageRoute.post("/delete-message", async (c) => {
