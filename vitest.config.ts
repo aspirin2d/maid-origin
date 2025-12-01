@@ -20,6 +20,7 @@ export default defineConfig({
         test: {
           name: "e2e",
           include: ["tests/e2e/**/*.test.ts"],
+          setupFiles: ["tests/e2e/setup.ts"],
         },
       }),
     ],
