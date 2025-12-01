@@ -118,7 +118,7 @@ describe("story API routes", () => {
     expect(res.status).toBe(400);
   });
 
-  it("gets a story by id", async () => {
+  it("gets a story by ID", async () => {
     mockDb.select.mockReturnValue(
       makeSelectBuilder([{ id: 5, name: "Story", handler: "simple", userId: "user-1" }]),
     );

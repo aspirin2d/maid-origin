@@ -94,7 +94,7 @@ describe("message API routes", () => {
     expect(body.messages[0].id).toBe(2);
   });
 
-  it("gets a message by id", async () => {
+  it("gets a message by ID", async () => {
     mockDb.select.mockReturnValue(
       makeSelectBuilder([{ id: 5, storyId: 1, contentType: "query", content: {} }]),
     );

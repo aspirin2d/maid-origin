@@ -20,6 +20,10 @@ extractionWorker.on("active", (job) => {
   console.log(`Extraction worker started processing job ${job.id}`);
 });
 
+extractionWorker.on("error", (error) => {
+  console.log(`Extraction worker error: ${error.message}`);
+});
+
 extractionWorker.on("completed", (job) => {
   console.log(`Extraction worker completed job ${job.id}`);
 });

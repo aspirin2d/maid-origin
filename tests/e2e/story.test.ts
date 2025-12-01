@@ -23,6 +23,7 @@ async function expectJsonResponse<T>(
     const errorBody = await response
       .text()
       .catch(() => "<unable to read body>");
+    console.log(errorBody);
     throw new Error(
       `Request failed with ${response.status} ${response.statusText}: ${errorBody}`,
     );
@@ -70,14 +71,18 @@ test("authenticated user can complete a story lifecycle", async () => {
         headers: authHeaders,
       },
     );
+
     const fetched = await expectJsonResponse<StoryResponse>(getResponse);
+
     expect(fetched.story?.id).toBe(createdStoryId);
     expect(fetched.story?.name).toBe(createPayload.name);
 
     const updatePayload = {
       id: createdStoryId,
-      name: `${createPayload.name} Updated`,
-      handler: `${createPayload.handler}-updated`,
+      data: {
+        name: `${createPayload.name} Updated`,
+        handler: `${createPayload.handler}-updated`,
+      },
     };
     const updateResponse = await fetch(`${baseUrl}/api/update-story`, {
       method: "POST",
@@ -85,8 +90,8 @@ test("authenticated user can complete a story lifecycle", async () => {
       body: JSON.stringify(updatePayload),
     });
     const updated = await expectJsonResponse<StoryResponse>(updateResponse);
-    expect(updated.story?.name).toBe(updatePayload.name);
-    expect(updated.story?.handler).toBe(updatePayload.handler);
+    expect(updated.story?.name).toBe(updatePayload.data.name);
+    expect(updated.story?.handler).toBe(updatePayload.data.handler);
 
     const listResponse = await fetch(`${baseUrl}/api/list-stories?limit=20`, {
       headers: authHeaders,
@@ -95,8 +100,8 @@ test("authenticated user can complete a story lifecycle", async () => {
     const foundInList = list.stories?.some(
       (story) =>
         story.id === createdStoryId &&
-        story.name === updatePayload.name &&
-        story.handler === updatePayload.handler,
+        story.name === updatePayload.data.name &&
+        story.handler === updatePayload.data.handler,
     );
     expect(foundInList).toBe(true);
 

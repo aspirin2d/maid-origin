@@ -22,22 +22,28 @@ import { addExtractionJob } from "./queue/index.ts";
 const storyRoute = new Hono<AppEnv>();
 
 // Only validate fields that should come from the request body; userId comes from auth context.
-const createStorySchema = createInsertSchema(story);
+const createStorySchema = createInsertSchema(story).pick({
+  name: true,
+  handler: true,
+});
+
 const updateStorySchema = z.object({
   id: z.int(),
-  data: createUpdateSchema(story),
+  data: createUpdateSchema(story).pick({
+    name: true,
+    handler: true,
+  }),
 });
 
 const storyIdSchema = z.coerce.number().int().positive({
   message: "Story id must be a positive integer",
 });
-
 const deleteStorySchema = z.object({
   id: storyIdSchema,
 });
 
 const generateStorySchema = z.object({
-  storyId: z.int(),
+  storyId: z.coerce.number().int(),
   input: z.unknown(),
 });
 
