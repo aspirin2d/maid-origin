@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { Hono, type Context } from "hono";
-import z from "zod";
+import { z } from "zod";
 
 import type { AppEnv } from "./auth.ts";
 import { db } from "./db/index.ts";
@@ -40,12 +40,19 @@ const listMessagesQuerySchema = paginationParamsSchema.extend({
   sortDirection: z.enum(["asc", "desc"]).optional().nullish(),
 });
 
-const messageIdSchema = z.int().positive({
-  message: "Message id must be a positive integer",
-});
+const messageIdSchema = positiveIntegerParam;
 
 const deleteMessageSchema = z.object({
   id: messageIdSchema,
+});
+
+const messageUpdateSchema = z.object({
+  id: messageIdSchema,
+  data: z.object({
+    contentType: z.enum(["query", "response"]).optional(),
+    content: z.any().optional(),
+    extracted: z.boolean().optional(),
+  }),
 });
 
 const missingUserResponse = (c: Context<AppEnv>) =>
@@ -111,7 +118,7 @@ messageRoute.get("/get-message", async (c) => {
     return missingUserResponse(c);
   }
 
-  const messageIdResult = messageIdSchema.safeParse(c.req.query("id"));
+  const messageIdResult = positiveIntegerParam.safeParse(c.req.query("id"));
   if (!messageIdResult.success) {
     return c.json({ error: z.treeifyError(messageIdResult.error) }, 400);
   }
@@ -129,6 +136,64 @@ messageRoute.get("/get-message", async (c) => {
   }
 
   return c.json({ message: record });
+});
+
+messageRoute.post("/update-message", async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return missingUserResponse(c);
+  }
+
+  let payload: unknown;
+  try {
+    payload = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const parsed = messageUpdateSchema.safeParse(payload);
+  if (!parsed.success) {
+    return c.json({ error: z.treeifyError(parsed.error) }, 400);
+  }
+
+  const { data: parsedData } = messageUpdateSchema.parse(payload);
+
+  const updateData =
+    "data" in parsed.data
+      ? parsed.data.data
+      : {
+          contentType: parsedData.contentType,
+          content: parsedData.content,
+          extracted: parsedData.extracted,
+        };
+
+  const authorizedMessage = await db
+    .select({ id: message.id, storyId: message.storyId })
+    .from(message)
+    .innerJoin(story, eq(message.storyId, story.id))
+    .where(and(eq(message.id, parsed.data.id), eq(story.userId, user.id)))
+    .limit(1);
+
+  const record = authorizedMessage[0];
+  if (!record) {
+    return c.json({ error: "Message not found" }, 404);
+  }
+
+  const updated = await db
+    .update(message)
+    .set({
+      ...updateData,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(message.id, record.id), eq(message.storyId, record.storyId)))
+    .returning();
+
+  const updatedRecord = updated[0];
+  if (!updatedRecord) {
+    return c.json({ error: "Message not found" }, 404);
+  }
+
+  return c.json({ message: updatedRecord });
 });
 
 messageRoute.post("/delete-message", async (c) => {

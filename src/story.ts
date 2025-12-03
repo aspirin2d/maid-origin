@@ -15,6 +15,7 @@ import {
   applyPagination,
   normalizeQueryValue,
   paginationParamsSchema,
+  positiveIntegerParam,
 } from "./pagination.ts";
 import { addExtractionJob } from "./queue/index.ts";
 
@@ -23,10 +24,6 @@ const storyRoute = new Hono<AppEnv>();
 const storyInsertSchema = z.object({
   name: z.string().trim().min(1).max(100),
   handler: z.string().trim().min(1).max(100),
-});
-
-const storyIdSchema = z.coerce.number().int().positive({
-  message: "Story id must be a positive integer",
 });
 
 const deleteStorySchema = z.object({
@@ -100,7 +97,7 @@ storyRoute.get("/get-story", async (c) => {
     return missingUserResponse(c);
   }
 
-  const storyIdResult = storyIdSchema.safeParse(c.req.query("id"));
+  const storyIdResult = positiveIntegerParam.safeParse(c.req.query("id"));
   if (!storyIdResult.success) {
     return c.json({ error: z.treeifyError(storyIdResult.error) }, 400);
   }
@@ -176,16 +173,12 @@ storyRoute.post("/update-story", async (c) => {
     return c.json({ error: z.treeifyError(parsed.error) }, 400);
   }
 
-  // Prevent changing ownership or immutable fields via payload
-  const updateData = { ...parsed.data.data };
-  delete (updateData as any).userId;
-  delete (updateData as any).id;
-  delete (updateData as any).createdAt;
+  const { data: parsedData } = parsed.data;
 
   const updated = await db
     .update(story)
     .set({
-      ...updateData,
+      ...parsedData,
       updatedAt: new Date(),
     })
     .where(and(eq(story.id, parsed.data.id), eq(story.userId, user.id)))
