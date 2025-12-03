@@ -1,6 +1,5 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
-import { createInsertSchema, createUpdateSchema } from "drizzle-zod";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 
@@ -21,30 +20,22 @@ import { addExtractionJob } from "./queue/index.ts";
 
 const storyRoute = new Hono<AppEnv>();
 
-// Only validate fields that should come from the request body; userId comes from auth context.
-const createStorySchema = createInsertSchema(story).pick({
-  name: true,
-  handler: true,
-});
-
-const updateStorySchema = z.object({
-  id: z.int(),
-  data: createUpdateSchema(story).pick({
-    name: true,
-    handler: true,
-  }),
+const storyInsertSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  handler: z.string().trim().min(1).max(100),
 });
 
 const storyIdSchema = z.coerce.number().int().positive({
   message: "Story id must be a positive integer",
 });
+
 const deleteStorySchema = z.object({
-  id: storyIdSchema,
+  id: z.int().positive(),
 });
 
 const generateStorySchema = z.object({
-  storyId: z.coerce.number().int(),
-  input: z.unknown(),
+  storyId: z.int().positive(),
+  input: z.any(),
 });
 
 const sortableStoryFields = [
@@ -86,7 +77,7 @@ storyRoute.post("/create-story", async (c) => {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
 
-  const parsed = createStorySchema.safeParse(payload);
+  const parsed = storyInsertSchema.safeParse(payload);
   if (!parsed.success) {
     return c.json({ error: z.treeifyError(parsed.error) }, 400);
   }
@@ -175,7 +166,12 @@ storyRoute.post("/update-story", async (c) => {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
 
-  const parsed = updateStorySchema.safeParse(payload);
+  const parsed = z
+    .object({
+      id: z.int(),
+      data: storyInsertSchema,
+    })
+    .safeParse(payload);
   if (!parsed.success) {
     return c.json({ error: z.treeifyError(parsed.error) }, 400);
   }

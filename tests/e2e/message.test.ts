@@ -126,7 +126,7 @@ test("list-messages returns newest messages for a story", async () => {
       body: JSON.stringify({ id: storyId }),
     }).catch(() => undefined);
 
-    await fetch(`${baseUrl}/api/prune-message`, {
+    await fetch(`${baseUrl}/api/prune-messages`, {
       method: "POST",
       headers: authHeaders,
     }).catch(() => undefined);
@@ -204,7 +204,7 @@ test("list-messages supports pagination and explicit sorting", async () => {
       body: JSON.stringify({ id: storyId }),
     }).catch(() => undefined);
 
-    await fetch(`${baseUrl}/api/prune-message`, {
+    await fetch(`${baseUrl}/api/prune-messages`, {
       method: "POST",
       headers: authHeaders,
     }).catch(() => undefined);

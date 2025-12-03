@@ -1,6 +1,5 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
-import { createInsertSchema, createUpdateSchema } from "drizzle-zod";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -52,12 +51,20 @@ const deleteMemorySchema = z.object({
   id: memoryIdSchema,
 });
 
-const memoryUpdateSchema = z.object({
-  id: z.int(),
-  data: createUpdateSchema(memory),
+export const memoryInsertSchema = z.object({
+  content: z.string().trim().min(1),
+  category: z.string().trim().min(1),
+  importance: z.number().gt(0).lte(1),
+  confidence: z.number().gt(0).lte(1),
+  action: z.enum(["ADD", "UPDATE", "DELETE"]),
 });
 
-const createMemorySchema = createInsertSchema(memory);
+const memoryUpdateSchema = z.object({
+  id: z.int(),
+  data: memoryInsertSchema,
+});
+
+const createMemorySchema = memoryInsertSchema;
 
 export const memoryRoute = new Hono<AppEnv>();
 
@@ -190,9 +197,6 @@ memoryRoute.post("/update-memory", async (c) => {
 
   // Prevent changing ownership or immutable fields via payload
   const updateData = { ...parsed.data.data };
-  delete (updateData as any).userId;
-  delete (updateData as any).id;
-  delete (updateData as any).createdAt;
 
   const existing = await db
     .select()

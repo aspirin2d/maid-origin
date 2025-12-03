@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { Hono, type Context } from "hono";
-import { z } from "zod";
+import z from "zod";
 
 import type { AppEnv } from "./auth.ts";
 import { db } from "./db/index.ts";
@@ -40,7 +40,7 @@ const listMessagesQuerySchema = paginationParamsSchema.extend({
   sortDirection: z.enum(["asc", "desc"]).optional().nullish(),
 });
 
-const messageIdSchema = z.coerce.number().int().positive({
+const messageIdSchema = z.int().positive({
   message: "Message id must be a positive integer",
 });
 
@@ -174,7 +174,7 @@ messageRoute.post("/delete-message", async (c) => {
   return c.json({ message: deletedRecord });
 });
 
-messageRoute.post("/prune-message", async (c) => {
+messageRoute.post("/prune-messages", async (c) => {
   if (env.isProduction) {
     return c.json({ error: "Endpoint disabled in production" }, 404);
   }
