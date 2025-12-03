@@ -26,6 +26,19 @@ const storyInsertSchema = z.object({
   handler: z.string().trim().min(1).max(100),
 });
 
+const storyUpdateSchema = z
+  .object({
+    id: z.int().positive(),
+    data: z.object({
+      name: z.string().trim().min(1).max(100).optional(),
+      handler: z.string().trim().min(1).max(100).optional(),
+    }),
+  })
+  .refine(({ data }) => data.name !== undefined || data.handler !== undefined, {
+    message: "Either 'name' or 'handler' must be provided.",
+    path: ["name"], // or ["handler"], doesn't matter
+  });
+
 const deleteStorySchema = z.object({
   id: z.int().positive(),
 });
@@ -163,12 +176,7 @@ storyRoute.post("/update-story", async (c) => {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
 
-  const parsed = z
-    .object({
-      id: z.int(),
-      data: storyInsertSchema,
-    })
-    .safeParse(payload);
+  const parsed = storyUpdateSchema.safeParse(payload);
   if (!parsed.success) {
     return c.json({ error: z.treeifyError(parsed.error) }, 400);
   }

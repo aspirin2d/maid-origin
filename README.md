@@ -75,6 +75,10 @@ Handler input hints:
   Deletes all of the caller’s memories. **Disabled in production**.
 
 ### Messages
+- `POST /api/create-message`  
+  Body: `{ "storyId": number, "contentType": "query" | "response", "content": any, "extracted"?: boolean }`  
+  Creates a message under a story the caller owns and triggers memory extraction.
+
 - `GET /api/list-messages?storyId&limit&offset&sortBy=id|storyId|contentType|extracted|createdAt|updatedAt&sortDirection=asc|desc`  
   Returns paginated, sorted messages belonging to the caller. Optional `storyId` narrows results to one story.
 
@@ -89,7 +93,7 @@ Handler input hints:
   Body: `{ "id": number }`  
   Deletes one message owned by the caller.
 
-- `POST /api/prune-message`  
+- `POST /api/prune-messages`  
   Deletes all messages across the caller’s stories. **Disabled in production**.
 
 ## Memory Extraction Flow

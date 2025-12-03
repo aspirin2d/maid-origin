@@ -13,6 +13,7 @@ import {
   paginationParamsSchema,
   positiveIntegerParam,
 } from "./pagination.ts";
+import { addExtractionJob } from "./queue/index.ts";
 
 const sortableMessageFields = [
   "id",
@@ -42,23 +43,83 @@ const listMessagesQuerySchema = paginationParamsSchema.extend({
 
 const messageIdSchema = positiveIntegerParam;
 
+const messageInsertSchema = z.object({
+  storyId: positiveIntegerParam,
+  contentType: z.enum(["query", "response"]),
+  content: z.any(),
+  extracted: z.boolean().optional(),
+});
+
 const deleteMessageSchema = z.object({
   id: messageIdSchema,
 });
 
-const messageUpdateSchema = z.object({
-  id: messageIdSchema,
-  data: z.object({
+const messageUpdateDataSchema = z
+  .object({
     contentType: z.enum(["query", "response"]).optional(),
     content: z.any().optional(),
     extracted: z.boolean().optional(),
-  }),
+  })
+  .refine(
+    (data) =>
+      data.contentType !== undefined ||
+      data.content !== undefined ||
+      data.extracted !== undefined,
+    { message: "At least one field must be provided" },
+  );
+
+const messageUpdateSchema = z.object({
+  id: messageIdSchema,
+  data: messageUpdateDataSchema,
 });
 
 const missingUserResponse = (c: Context<AppEnv>) =>
   c.json({ error: "User missing from request context" }, 500);
 
 export const messageRoute = new Hono<AppEnv>();
+
+messageRoute.post("/create-message", async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return missingUserResponse(c);
+  }
+
+  let payload: unknown;
+  try {
+    payload = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const parsed = messageInsertSchema.safeParse(payload);
+  if (!parsed.success) {
+    return c.json({ error: z.treeifyError(parsed.error) }, 400);
+  }
+
+  const [owningStory] = await db
+    .select({ id: story.id })
+    .from(story)
+    .where(and(eq(story.id, parsed.data.storyId), eq(story.userId, user.id)))
+    .limit(1);
+
+  if (!owningStory) {
+    return c.json({ error: "Story not found" }, 404);
+  }
+
+  const [newMessage] = await db
+    .insert(message)
+    .values({
+      storyId: parsed.data.storyId,
+      contentType: parsed.data.contentType,
+      content: parsed.data.content,
+      extracted: parsed.data.extracted ?? false,
+    })
+    .returning();
+
+  await addExtractionJob(user.id);
+
+  return c.json({ message: newMessage }, 201);
+});
 
 messageRoute.get("/list-messages", async (c) => {
   const user = c.get("user");
@@ -156,17 +217,6 @@ messageRoute.post("/update-message", async (c) => {
     return c.json({ error: z.treeifyError(parsed.error) }, 400);
   }
 
-  const { data: parsedData } = messageUpdateSchema.parse(payload);
-
-  const updateData =
-    "data" in parsed.data
-      ? parsed.data.data
-      : {
-          contentType: parsedData.contentType,
-          content: parsedData.content,
-          extracted: parsedData.extracted,
-        };
-
   const authorizedMessage = await db
     .select({ id: message.id, storyId: message.storyId })
     .from(message)
@@ -182,7 +232,7 @@ messageRoute.post("/update-message", async (c) => {
   const updated = await db
     .update(message)
     .set({
-      ...updateData,
+      ...parsed.data.data,
       updatedAt: new Date(),
     })
     .where(and(eq(message.id, record.id), eq(message.storyId, record.storyId)))

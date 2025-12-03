@@ -59,9 +59,27 @@ export const memoryInsertSchema = z.object({
   action: z.enum(["ADD", "UPDATE", "DELETE"]),
 });
 
+const memoryUpdateDataSchema = z
+  .object({
+    content: z.string().trim().min(1).optional(),
+    category: z.string().trim().min(1).optional(),
+    importance: z.number().gt(0).lte(1).optional(),
+    confidence: z.number().gt(0).lte(1).optional(),
+    action: z.enum(["ADD", "UPDATE", "DELETE"]).optional(),
+  })
+  .refine(
+    (data) =>
+      data.content !== undefined ||
+      data.category !== undefined ||
+      data.importance !== undefined ||
+      data.confidence !== undefined ||
+      data.action !== undefined,
+    { message: "At least one field must be provided" },
+  );
+
 const memoryUpdateSchema = z.object({
-  id: z.int(),
-  data: memoryInsertSchema,
+  id: memoryIdSchema,
+  data: memoryUpdateDataSchema,
 });
 
 const createMemorySchema = memoryInsertSchema;
@@ -195,8 +213,10 @@ memoryRoute.post("/update-memory", async (c) => {
     return c.json({ error: z.treeifyError(parsed.error) }, 400);
   }
 
-  // Prevent changing ownership or immutable fields via payload
-  const updateData = { ...parsed.data.data };
+  // Prevent changing ownership or immutable fields via payload and drop undefineds
+  const updateData = Object.fromEntries(
+    Object.entries(parsed.data.data).filter(([, value]) => value !== undefined),
+  );
 
   const existing = await db
     .select()
